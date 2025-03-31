@@ -37,7 +37,8 @@ class Trail(ABC):
         trails = {**cls.trails}
 
         for base in cls.__mro__[1:]:
-            trails.update(base.trails)
+            if isinstance(base, Trail):
+                trails.update(base.trails)
 
         return trails
 
