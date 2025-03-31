@@ -24,6 +24,15 @@ class Trail(ABC):
         self.__primary_trail = primary_trail
         self.__errors: List[Exception] = []
         self.__errors_stacktrace: List[str] = []
+        self.__terminated = False
+
+    def terminate(self):
+        self.__terminated = True
+
+    @property
+    @final
+    def terminated(self):
+        return self.__terminated
 
     @classmethod
     def __get_trails(cls):
@@ -36,20 +45,32 @@ class Trail(ABC):
         return trails
 
     @classmethod
-    def get_trails(cls):
-        trails = cls.__get_trails()
-
-        for sub_trail in (
-            cls.__get_trail(trails[key])
-            for key in sorted(
-                trails.keys(),
-                reverse=True,
-            )
+    def get_before_trails(cls):
+        for _, trail in sorted(
+            filter(
+                lambda v: v[0] < 0,
+                cls.__get_trails().items(),
+            ),
+            key=lambda v: v[0],
         ):
-            if sub_trail == None:
-                continue
+            trail = cls.__get_trail(trail)
 
-            yield sub_trail
+            if trail != None:
+                yield trail
+
+    @classmethod
+    def get_after_trails(cls):
+        for _, trail in sorted(
+            filter(
+                lambda v: v[0] >= 0,
+                cls.__get_trails().items(),
+            ),
+            key=lambda v: v[0],
+        ):
+            trail = cls.__get_trail(trail)
+
+            if trail != None:
+                yield trail
 
     @classmethod
     def __get_trail(cls, value: Union[Type["Trail"], str, None]):
@@ -292,7 +313,7 @@ class Trail(ABC):
     def __process(self, value):
         if isgenerator(value):
             for subvalue in value:
-                if subvalue == TERMINATE:
+                if self.terminated:
                     return
 
                 yield self.process(subvalue)
@@ -301,12 +322,8 @@ class Trail(ABC):
 
         yield self.process(value)
 
-    def __run(self, value):
-        for sub_trail in self.get_trails():
-            yield from sub_trail().run(value)
-
     @final
-    def run(self, value):
+    def run(self, value: Any = None):
         """
         Runs the trail with the given value, processing it and any sub-trails.
 
@@ -316,10 +333,24 @@ class Trail(ABC):
         Yields:
             Results from processing the value and any sub-trails.
         """
-        for subvalue in self.__process(value):
-            yield from self.run(
-                self.__run(subvalue),
-            )
+        for sub_trail in self.get_before_trails():
+            value = sub_trail().run(value)
+
+            if self.terminated:
+                return value
+
+        value = self.__process(value)
+
+        if self.terminated:
+            return value
+
+        for sub_trail in self.get_after_trails():
+            value = sub_trail().run(value)
+
+            if self.terminated:
+                return value
+
+        return value
 
     @classmethod
     @final
