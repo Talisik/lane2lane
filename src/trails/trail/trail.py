@@ -1,13 +1,11 @@
 import re
 import traceback
-from abc import ABC, abstractmethod
+from abc import ABC
 from inspect import isgenerator
 from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union, final
 
 from fun_things import categorizer, get_all_descendant_classes
 from simple_chalk import chalk
-
-from ..constants import TERMINATE
 
 T = TypeVar("T")
 
@@ -39,8 +37,7 @@ class Trail(ABC):
         trails = {**cls.trails}
 
         for base in cls.__mro__[1:]:
-            if hasattr(base, "trails"):
-                trails.update(base.trails)
+            trails.update(base.trails)
 
         return trails
 
@@ -206,7 +203,10 @@ class Trail(ABC):
         Returns:
             True if the trail should be activated, False otherwise.
         """
-        return name in cls.name()
+        if cls.primary():
+            return name in cls.name()
+
+        return True
 
     def init(self):
         """
@@ -316,7 +316,13 @@ class Trail(ABC):
                 if self.terminated:
                     return
 
-                yield self.process(subvalue)
+                result = self.process(subvalue)
+
+                if isgenerator(result):
+                    yield from result
+                    return
+
+                yield result
 
             return
 
@@ -333,24 +339,32 @@ class Trail(ABC):
         Yields:
             Results from processing the value and any sub-trails.
         """
-        for sub_trail in self.get_before_trails():
-            value = sub_trail().run(value)
+        try:
+            self.__run_count += 1
+
+            for sub_trail in self.get_before_trails():
+                value = sub_trail().run(value)
+
+                if self.terminated:
+                    return value
+
+            value = self.__process(value)
 
             if self.terminated:
                 return value
 
-        value = self.__process(value)
+            for sub_trail in self.get_after_trails():
+                value = sub_trail().run(value)
 
-        if self.terminated:
+                if self.terminated:
+                    return value
+
             return value
+        except Exception as e:
+            self.__errors.append(e)
+            self.__errors_stacktrace.append(traceback.format_exc())
 
-        for sub_trail in self.get_after_trails():
-            value = sub_trail().run(value)
-
-            if self.terminated:
-                return value
-
-        return value
+            raise e
 
     @classmethod
     @final
@@ -410,29 +424,17 @@ class Trail(ABC):
                 trails,
             )
 
-        __errors: List[Exception] = []
-        __errors_str: List[str] = []
-        __errors_stacktrace: List[str] = []
-
         for trail in trails:
-            stop = False
+            result = trail.run(None)
 
-            try:
-                for item in trail.run(None):
-                    if item == TERMINATE:
-                        stop = True
-                        break
+            if isgenerator(result):
+                yield from result
+                continue
 
-                    yield item
+            yield result
 
-            except Exception as e:
-                traceback.print_exc()
-                __errors.append(e)
-                __errors_str.append(str(e))
-                __errors_stacktrace.append(traceback.format_exc())
-
-            if stop:
-                break
+            if trail.terminated:
+                return
 
     @staticmethod
     @final
