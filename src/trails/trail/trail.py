@@ -25,15 +25,30 @@ class Trail(ABC):
         self.__terminated = False
 
     def terminate(self):
+        """
+        Terminates this trail, preventing further processing.
+        """
         self.__terminated = True
 
     @property
     @final
     def terminated(self):
+        """
+        Returns whether this trail has been terminated.
+
+        Returns:
+            bool: True if terminated, False otherwise.
+        """
         return self.__terminated
 
     @classmethod
     def __get_trails(cls):
+        """
+        Gets all trails from this class and its parent classes.
+
+        Returns:
+            Dict: A dictionary of trails indexed by priority number.
+        """
         trails = {**cls.trails}
 
         for base in cls.__mro__[1:]:
@@ -44,6 +59,13 @@ class Trail(ABC):
 
     @classmethod
     def get_before_trails(cls):
+        """
+        Gets all trails with negative priority numbers, sorted by priority.
+        These trails are executed before the main trail.
+
+        Yields:
+            Trail: Trail instances with negative priority numbers.
+        """
         for _, trail in sorted(
             filter(
                 lambda v: v[0] < 0,
@@ -58,6 +80,13 @@ class Trail(ABC):
 
     @classmethod
     def get_after_trails(cls):
+        """
+        Gets all trails with non-negative priority numbers, sorted by priority.
+        These trails are executed after the main trail.
+
+        Yields:
+            Trail: Trail instances with non-negative priority numbers.
+        """
         for _, trail in sorted(
             filter(
                 lambda v: v[0] >= 0,
@@ -72,6 +101,15 @@ class Trail(ABC):
 
     @classmethod
     def __get_trail(cls, value: Union[Type["Trail"], str, None]):
+        """
+        Converts a trail value to a trail instance.
+
+        Args:
+            value: A trail class, trail name, or None.
+
+        Returns:
+            Trail: The trail instance if value is not None, otherwise None.
+        """
         if value == None:
             return None
 
@@ -119,6 +157,18 @@ class Trail(ABC):
         Yields all error stacktraces encountered in this trail or its primary trail.
         """
         yield from (self.primary_trail or self).__errors_stacktrace
+
+    @final
+    def __add_error(self, error: Exception, stacktrace: str):
+        """
+        Adds an error and its stacktrace to the primary trail's error list.
+
+        Args:
+            error: The exception that occurred.
+            stacktrace: The stacktrace of the exception.
+        """
+        (self.primary_trail or self).__errors.append(error)
+        (self.primary_trail or self).__errors_stacktrace.append(stacktrace)
 
     @classmethod
     @final
@@ -219,6 +269,15 @@ class Trail(ABC):
     @staticmethod
     @final
     def __trail_predicate(trail: Type["Trail"]):
+        """
+        Determines whether a trail can be run based on its maximum run count.
+
+        Args:
+            trail: The trail to check.
+
+        Returns:
+            bool: True if the trail can be run, False otherwise.
+        """
         max_run_count = trail.max_run_count()
 
         if max_run_count <= 0:
@@ -362,8 +421,10 @@ class Trail(ABC):
 
             return value
         except Exception as e:
-            self.__errors.append(e)
-            self.__errors_stacktrace.append(traceback.format_exc())
+            self.__add_error(
+                e,
+                traceback.format_exc(),
+            )
 
             raise e
 
@@ -442,6 +503,12 @@ class Trail(ABC):
     def __print_load_order(
         trails: List["Trail"],
     ):
+        """
+        Prints the load order of trails based on their priority numbers.
+
+        Args:
+            trails: A list of trails to print.
+        """
         if not any(trails):
             return
 
@@ -491,6 +558,16 @@ class Trail(ABC):
         item: Type["Trail"],
         name: Optional[str],
     ):
+        """
+        Formats a trail name for printing with appropriate styling.
+
+        Args:
+            item: The trail class.
+            name: The name to check conditions against, or None.
+
+        Returns:
+            str: Formatted trail name with appropriate styling.
+        """
         text = item.first_name()
 
         if name == None:
@@ -518,6 +595,14 @@ class Trail(ABC):
         trails,
         indent_text: str,
     ):
+        """
+        Draws trails in a tree-like format with their priority numbers.
+
+        Args:
+            name: The name to check conditions against.
+            trails: The trails to draw.
+            indent_text: The indentation text to use.
+        """
         trails0: List[Type["Trail"]] = [trail[0] for trail in trails]
         trails0.sort(
             key=lambda trail: trail.priority_number(),
@@ -575,6 +660,19 @@ class Trail(ABC):
         keyword: str,
         category: Any,
     ):
+        """
+        Draws categorized trails with appropriate indentation.
+
+        Args:
+            name: The name to check conditions against.
+            indent_size: The base indentation size.
+            indent_scale: The indentation scale factor.
+            keyword: The category keyword.
+            category: The category to draw.
+
+        Yields:
+            Tuple: (indent_size, sub_category) pairs for nested categories.
+        """
         if keyword == None:
             keyword = "*"
 
