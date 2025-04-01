@@ -1,11 +1,11 @@
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from typing import Iterable, final
 
 from ..constants import LOGGER
-from .trail import Trail
+from .lane import Lane
 
 
-class Subscriber(Trail):
+class Subscriber(Lane, ABC):
     @abstractmethod
     def get_payloads(self) -> Iterable:
         pass
