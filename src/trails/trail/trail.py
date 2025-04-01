@@ -2,10 +2,13 @@ import re
 import traceback
 from abc import ABC
 from inspect import isgenerator
+from time import perf_counter
 from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union, final
 
 from fun_things import categorizer, get_all_descendant_classes
 from simple_chalk import chalk
+
+from ..constants import LOGGER
 
 T = TypeVar("T")
 
@@ -14,6 +17,8 @@ class Trail(ABC):
     trails: Dict[int, Union[Type["Trail"], str, None]] = {}
 
     __run_count: int = 0
+    __global_errors: List[Exception] = []
+    __global_errors_stacktrace: List[str] = []
 
     def __init__(
         self,
@@ -23,12 +28,75 @@ class Trail(ABC):
         self.__errors: List[Exception] = []
         self.__errors_stacktrace: List[str] = []
         self.__terminated = False
+        self.__start_time = perf_counter()
+
+        LOGGER().debug(
+            "N-%d %s initialized.",
+            self.__run_count,
+            self.first_name(),
+        )
+
+        self.init()
 
     def terminate(self):
         """
         Terminates this trail, preventing further processing.
         """
         self.__terminated = True
+
+        LOGGER().debug(
+            "N-%d %s terminated.",
+            self.__run_count,
+            self.first_name(),
+        )
+
+    @property
+    @final
+    def start_time(self):
+        """
+        Returns the start time of this trail.
+        """
+        return self.__start_time
+
+    @property
+    @final
+    def duration(self):
+        """
+        Returns the duration of this trail.
+        """
+        return perf_counter() - self.__start_time
+
+    @classmethod
+    @final
+    def terminate_on_error(cls):
+        """
+        Returns whether this trail should terminate on error.
+        """
+        return True
+
+    @classmethod
+    @final
+    def global_errors(cls):
+        """
+        Returns all global errors encountered during trail processing.
+        """
+        return cls.__global_errors
+
+    @classmethod
+    @final
+    def global_errors_stacktrace(cls):
+        """
+        Returns all global error stacktraces encountered during trail processing.
+        """
+        return cls.__global_errors_stacktrace
+
+    @classmethod
+    @final
+    def global_errors_count(cls):
+        """
+        Returns the count of global errors encountered during trail processing.
+        """
+        return len(cls.__global_errors)
 
     @property
     @final
@@ -169,6 +237,8 @@ class Trail(ABC):
         """
         (self.primary_trail or self).__errors.append(error)
         (self.primary_trail or self).__errors_stacktrace.append(stacktrace)
+        self.__global_errors.append(error)
+        self.__global_errors_stacktrace.append(stacktrace)
 
     @classmethod
     @final
@@ -184,7 +254,7 @@ class Trail(ABC):
         Indicates whether this trail is a primary trail.
         Default implementation returns True.
         """
-        return True
+        return False
 
     @classmethod
     def hidden(cls) -> bool:
@@ -371,22 +441,48 @@ class Trail(ABC):
         return value
 
     def __process(self, value):
-        if isgenerator(value):
-            for subvalue in value:
-                if self.terminated:
-                    return
+        self.__start_time = perf_counter()
 
-                result = self.process(subvalue)
+        LOGGER().debug(
+            "N-%d %s started.",
+            self.__run_count,
+            self.first_name(),
+        )
 
-                if isgenerator(result):
-                    yield from result
-                    return
+        try:
+            if isgenerator(value):
+                for subvalue in value:
+                    if self.terminated:
+                        break
 
-                yield result
+                    result = self.process(subvalue)
 
-            return
+                    if isgenerator(result):
+                        yield from result
 
-        yield self.process(value)
+                    else:
+                        yield result
+
+            else:
+                yield self.process(value)
+
+        except Exception as e:
+            self.__add_error(
+                e,
+                traceback.format_exc(),
+            )
+
+            if self.terminate_on_error():
+                self.terminate()
+
+            traceback.print_exc()
+
+        LOGGER().debug(
+            "N-%d %s done in %ss.",
+            self.__run_count,
+            self.first_name(),
+            f"{self.duration:.2f}",
+        )
 
     @final
     def run(self, value: Any = None):
@@ -399,34 +495,30 @@ class Trail(ABC):
         Yields:
             Results from processing the value and any sub-trails.
         """
-        try:
-            self.__run_count += 1
+        self.__run_count += 1
 
-            for sub_trail in self.get_before_trails():
-                value = sub_trail().run(value)
-
-                if self.terminated:
-                    return value
-
-            value = self.__process(value)
+        for sub_trail in self.get_before_trails():
+            new_value = sub_trail().run(value)
 
             if self.terminated:
                 return value
 
-            for sub_trail in self.get_after_trails():
-                value = sub_trail().run(value)
+            value = new_value
 
-                if self.terminated:
-                    return value
+        new_value = self.__process(value)
 
+        if self.terminated:
             return value
-        except Exception as e:
-            self.__add_error(
-                e,
-                traceback.format_exc(),
-            )
 
-            raise e
+        for sub_trail in self.get_after_trails():
+            new_value = sub_trail().run(value)
+
+            if self.terminated:
+                return value
+
+            value = new_value
+
+        return value
 
     @classmethod
     @final
@@ -474,6 +566,9 @@ class Trail(ABC):
         Yields:
             Results from processing each matching trail.
         """
+        cls.__global_errors = []
+        cls.__global_errors_stacktrace = []
+
         trails = [*cls.get_primary_trails(name)]
 
         if print_trails:
@@ -494,9 +589,6 @@ class Trail(ABC):
                 continue
 
             yield result
-
-            if trail.terminated:
-                return
 
     @staticmethod
     @final
