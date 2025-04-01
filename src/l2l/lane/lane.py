@@ -104,12 +104,17 @@ class Lane(ABC):
     @staticmethod
     @final
     def global_errors():
-        return Lane.__global_errors
+        yield from Lane.__global_errors
+
+    @staticmethod
+    @final
+    def global_errors_str():
+        return (str(error) for error in Lane.__global_errors)
 
     @staticmethod
     @final
     def global_errors_stacktrace():
-        return Lane.__global_errors_stacktrace
+        yield from Lane.__global_errors_stacktrace
 
     @staticmethod
     @final
