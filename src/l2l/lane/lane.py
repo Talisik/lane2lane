@@ -18,6 +18,30 @@ T = TypeVar("T")
 
 class Lane(ABC):
     lanes: Dict[int, Union[Type["Lane"], str, None]] = {}
+    """
+    A dictionary of lane classes, indexed by their priority number.
+
+    This dictionary is used to store all lane classes that inherit from the `Lane` class.
+    The keys are the priority numbers, and the values are the lane class instances or
+    class names.
+    Example:
+        ```python
+        class MyLane(Lane):
+            # Define lanes to run before and after this lane
+            lanes = {
+                -10: "OtherLane",  # Run OtherLane before this lane (higher negative priority runs first) - string reference
+                -5: AnotherLane,   # Run AnotherLane after OtherLane but before this lane
+                0: SomeLane,       # Run SomeLane after this lane
+                10: PostLane,      # Run PostLane after SomeLane (higher positive priority runs first)
+                20: None,          # Use None to remove a lane at this priority
+            }
+        ```
+    
+    The priority numbers determine the execution order:
+    - Negative priorities: Lanes that run before this lane (more negative runs first)
+    - Positive priorities: Lanes that run after this lane (higher positive runs first)
+
+    """
 
     __run_count: int = 0
     __global_errors: List[Exception] = []
@@ -77,20 +101,20 @@ class Lane(ABC):
     def terminate_on_error(cls):
         return True
 
-    @classmethod
+    @staticmethod
     @final
-    def global_errors(cls):
-        return cls.__global_errors
+    def global_errors():
+        return Lane.__global_errors
 
-    @classmethod
+    @staticmethod
     @final
-    def global_errors_stacktrace(cls):
-        return cls.__global_errors_stacktrace
+    def global_errors_stacktrace():
+        return Lane.__global_errors_stacktrace
 
-    @classmethod
+    @staticmethod
     @final
-    def global_errors_count(cls):
-        return len(cls.__global_errors)
+    def global_errors_count():
+        return len(Lane.__global_errors)
 
     @property
     @final
@@ -169,19 +193,32 @@ class Lane(ABC):
             if lane != None:
                 yield lane
 
-    @classmethod
-    def __get_lane(cls, value: Union[Type["Lane"], str, None]):
+    @staticmethod
+    def __get_lane(value: Union[Type["Lane"], str, None]):
         if value == None:
             return None
 
         if isinstance(value, str):
-            return cls.get_lane(value)
+            return Lane.get_lane(value)
 
         return value
 
     @property
     @final
     def primary_lane(self):
+        """Returns the primary lane associated with this lane instance.
+
+        For primary lanes, this will return None as they don't have a parent primary lane.
+        For non-primary lanes (those executed as part of a lane chain), this returns
+        a reference to the primary lane that initiated the execution chain.
+
+        Returns:
+            Lane or None: The primary lane that initiated this lane's execution,
+                         or None if this is itself a primary lane.
+
+        See Also:
+            primary: Class method that determines if a lane is a primary entry point.
+        """
         return self.__primary_lane
 
     @property
@@ -214,6 +251,31 @@ class Lane(ABC):
     @classmethod
     @final
     def get_run_count(cls):
+        """Returns the number of times this lane has been executed.
+
+        This method returns the total number of times the lane has been run across
+        all primary and non-primary lanes. It includes the current execution if it's
+        part of a lane chain.
+
+        Returns:
+            int: The total number of times the lane has been executed.
+
+        Example:
+            ```python
+            class MyLane(Lane):
+                pass
+
+            # Run the lane
+            my_lane = MyLane()
+            my_lane.run()
+
+            # Check the run count
+            print(f"MyLane has been run {MyLane.get_run_count()} times")
+            ```
+
+        See Also:
+            run_count: Property that returns the number of times this lane has been executed.
+        """
         return cls.__run_count
 
     @classmethod
@@ -339,11 +401,56 @@ class Lane(ABC):
     @classmethod
     @final
     def first_name(cls) -> str:  # type: ignore
+        """Returns the first name from the lane's name generator.
+
+        This is a convenience method that returns the first name yielded by the
+        `name` method. It's useful when you need just a single identifier for the lane
+        rather than iterating through all possible names/aliases.
+
+        Returns:
+            str: The first name yielded by the `name` method.
+
+        Example:
+            ```python
+            class MyLane(Lane):
+                pass
+
+            # Instead of:
+            first = next(iter(MyLane.name()))
+
+            # You can use:
+            first = MyLane.first_name()
+            ```
+
+        See Also:
+            name: The method that generates all names/aliases for this lane.
+        """
         for name in cls.name():
             return name
 
     @classmethod
     def priority_number(cls) -> float:
+        """Returns the priority number for this lane.
+
+        The priority number is used to determine the order in which primary lanes
+        are executed when multiple lanes match the same condition. Lanes with higher
+        priority numbers are executed first.
+
+        This method is only relevant for primary lanes (will only be used if primary is True).
+        The default implementation returns 0, but subclasses can override this to provide
+        custom priority values.
+
+        Returns:
+            float: The priority number for this lane. Higher values indicate higher priority.
+
+        Example:
+            ```python
+            class HighPriorityLane(Lane):
+                @classmethod
+                def priority_number(cls) -> float:
+                    return 100  # This lane will run before lanes with lower priorities
+            ```
+        """
         return 0
 
     @classmethod
@@ -419,9 +526,9 @@ class Lane(ABC):
 
         return lane.__run_count < max_run_count
 
-    @classmethod
+    @staticmethod
     @final
-    def get_lane(cls, classname: str):
+    def get_lane(classname: str):
         """Retrieves a lane instance by its class name.
 
         Searches through all descendant lane classes to find one matching the specified
@@ -449,13 +556,13 @@ class Lane(ABC):
         See Also:
             all_lanes: Method that returns all descendant lane classes.
         """
-        for lane in cls.all_lanes():
-            if lane.__class__.__name__ == classname:
+        for lane in Lane.all_lanes():
+            if lane.__name__ == classname:
                 return lane
 
-    @classmethod
+    @staticmethod
     @final
-    def all_lanes(cls):
+    def all_lanes():
         """Returns all descendant lane classes in the application.
 
         This method uses the `get_all_descendant_classes` function to find all classes
@@ -479,13 +586,13 @@ class Lane(ABC):
             get_all_descendant_classes: External function that performs the class discovery.
         """
         return get_all_descendant_classes(
-            cls,
+            Lane,
             exclude=[ABC],
         )
 
-    @classmethod
+    @staticmethod
     @final
-    def available_lanes(cls):
+    def available_lanes():
         """Returns all available lane classes that can be run.
 
         This method filters the lanes returned by `all_lanes()` to include only those
@@ -508,14 +615,14 @@ class Lane(ABC):
             priority_number: Method that defines the sorting order.
         """
         return sorted(
-            filter(Lane.__lane_predicate, cls.all_lanes()),
+            filter(Lane.__lane_predicate, Lane.all_lanes()),
             key=lambda descendant: descendant.priority_number(),
             reverse=True,
         )
 
-    @classmethod
+    @staticmethod
     @final
-    def get_primary_lane(cls, name: str):
+    def get_primary_lane(name: str):
         """Returns the first primary lane that matches the specified name.
 
         This is a convenience method that calls `get_primary_lanes` and returns
@@ -540,12 +647,12 @@ class Lane(ABC):
             primary: Method that determines if a lane is primary.
             condition: Method that checks if a lane should run for a name.
         """
-        for lane in cls.get_primary_lanes(name):
+        for lane in Lane.get_primary_lanes(name):
             return lane
 
-    @classmethod
+    @staticmethod
     @final
-    def get_primary_lanes(cls, name: str):
+    def get_primary_lanes(name: str):
         """Returns all primary lanes that match the specified name.
 
         This method:
@@ -719,6 +826,8 @@ class Lane(ABC):
         if self.terminated:
             return value
 
+        value = new_value
+
         for sub_lane in self.get_after_lanes():
             new_value = sub_lane().run(value)
 
@@ -729,10 +838,9 @@ class Lane(ABC):
 
         return value
 
-    @classmethod
+    @staticmethod
     @final
     def start_all(
-        cls,
         name: str,
         print_lanes=True,
         print_indent=2,
@@ -766,17 +874,16 @@ class Lane(ABC):
             get_primary_lanes: Method that finds lanes to execute.
         """
         return [
-            *cls.start(
+            *Lane.start(
                 name,
                 print_lanes,
                 print_indent,
             )
         ]
 
-    @classmethod
+    @staticmethod
     @final
     def start(
-        cls,
         name: str,
         print_lanes=True,
         print_indent=2,
@@ -811,18 +918,18 @@ class Lane(ABC):
             get_primary_lanes: Method that finds lanes to execute.
             print_available_lanes: Method that shows available lanes.
         """
-        cls.__global_errors = []
-        cls.__global_errors_stacktrace = []
+        Lane.__global_errors = []
+        Lane.__global_errors_stacktrace = []
 
-        lanes = [*cls.get_primary_lanes(name)]
+        lanes = [*Lane.get_primary_lanes(name)]
 
         if print_lanes:
-            cls.print_available_lanes(
+            Lane.print_available_lanes(
                 name,
                 print_indent,
             )
 
-            cls.__print_load_order(
+            Lane.__print_load_order(
                 lanes,
             )
 
@@ -962,8 +1069,6 @@ class Lane(ABC):
                 ),
             )
 
-        print()
-
     @staticmethod
     @final
     def __draw_categories(
@@ -991,10 +1096,9 @@ class Lane(ABC):
         for sub_category in category.items():
             yield indent_size + 1, sub_category
 
-    @classmethod
+    @staticmethod
     @final
     def print_available_lanes(
-        cls,
         name: str = None,  # type: ignore
         indent: int = 2,
     ):
@@ -1038,7 +1142,7 @@ class Lane(ABC):
                     )
                     for lane in filter(
                         lambda lane: not lane.hidden(),
-                        cls.available_lanes(),
+                        Lane.available_lanes(),
                     )
                 ],
                 lambda tuple: tuple[1],
