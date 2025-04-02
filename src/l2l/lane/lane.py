@@ -6,9 +6,20 @@ from importlib import import_module
 from inspect import isgenerator
 from pkgutil import iter_modules
 from time import perf_counter
-from typing import Any, Dict, Iterable, List, Optional, Type, TypeVar, Union, final
+from typing import (
+    Any,
+    Dict,
+    Generic,
+    Iterable,
+    List,
+    Optional,
+    Type,
+    TypeVar,
+    Union,
+    final,
+)
 
-from fun_things import categorizer, get_all_descendant_classes
+from fun_things import categorizer, get_all_descendant_classes, load_modules
 from simple_chalk import chalk
 
 from ..constants import LOGGER
@@ -16,7 +27,7 @@ from ..constants import LOGGER
 T = TypeVar("T")
 
 
-class Lane(ABC):
+class Lane(Generic[T], ABC):
     lanes: Dict[int, Union[Type["Lane"], str, None]] = {}
     """
     A dictionary of lane classes, indexed by their priority number.
@@ -699,7 +710,7 @@ class Lane(ABC):
 
             yield descendant()
 
-    def process(self, value) -> Any:
+    def process(self, value: T) -> Any:
         """Processes a value through this lane's core logic.
 
         This is the main method that subclasses should override to implement their
@@ -1167,11 +1178,7 @@ class Lane(ABC):
                 categorized.append(sub_category)
 
     @staticmethod
-    def load_all(path: str):
-        return [*Lane.load(path)]
-
-    @staticmethod
-    def load(path: str):
+    def load(path: str, recursive: bool = True):
         """Recursively loads modules and packages from the given import path.
 
         This method imports all modules and packages within the specified path,
@@ -1200,33 +1207,4 @@ class Lane(ABC):
             This method is often called during application startup to ensure all
             lane classes are loaded and registered with the lane system.
         """
-        mod = import_module(path)
-
-        yield mod
-
-        if not hasattr(mod, "__path__"):
-            return
-
-        for _, subpath, ispkg in iter_modules(mod.__path__):
-            full_path = path + "." + subpath
-
-            if ispkg:
-                # Package (subfolder with __init__.py.)
-                yield from Lane.load(full_path)
-                continue
-
-            # Regular module.
-            submod = import_module(full_path)
-
-            yield submod
-
-        folder_path = path.replace(".", "/")
-
-        for name in os.listdir(folder_path):
-            if name.startswith("__") and name.endswith("__"):
-                continue
-
-            if not os.path.isdir(os.path.join(folder_path, name)):
-                continue
-
-            yield from Lane.load(f"{path}.{name}")
+        yield from load_modules(path, recursive)

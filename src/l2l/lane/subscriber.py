@@ -1,11 +1,13 @@
 from abc import ABC, abstractmethod
-from typing import Iterable, final
+from typing import Iterable, TypeVar, final
 
 from ..constants import LOGGER
 from .lane import Lane
 
+T = TypeVar("T")
 
-class Subscriber(Lane, ABC):
+
+class Subscriber(Lane[T], ABC):
     @abstractmethod
     def get_payloads(self) -> Iterable:
         pass
