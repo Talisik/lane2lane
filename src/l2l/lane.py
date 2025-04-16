@@ -1,10 +1,7 @@
-import os
 import re
 import traceback
 from abc import ABC
-from importlib import import_module
 from inspect import isgenerator
-from pkgutil import iter_modules
 from time import perf_counter
 from typing import (
     Any,
@@ -22,7 +19,7 @@ from typing import (
 from fun_things import categorizer, get_all_descendant_classes, load_modules
 from simple_chalk import chalk
 
-from ..constants import LOGGER
+from .constants import LOGGER
 
 T = TypeVar("T")
 
@@ -142,7 +139,7 @@ class Lane(Generic[T], ABC):
         lanes = {**cls.lanes}
 
         for base in cls.__mro__[1:]:
-            if isinstance(base, Lane):
+            if issubclass(base, Lane):
                 lanes.update(base.lanes)
 
         return lanes
@@ -1091,7 +1088,7 @@ class Lane(Generic[T], ABC):
         name: str,
         indent_size: int,
         indent_scale: int,
-        keyword: str,
+        keyword: Optional[str],
         category: Any,
     ):
         if keyword == None:

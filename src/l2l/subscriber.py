@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Iterable, TypeVar, final
 
-from ..constants import LOGGER
+from .constants import LOGGER
 from .lane import Lane
 
 T = TypeVar("T")
@@ -9,12 +9,12 @@ T = TypeVar("T")
 
 class Subscriber(Lane[T], ABC):
     @abstractmethod
-    def get_payloads(self) -> Iterable:
+    def get_payloads(self, value) -> Iterable:
         pass
 
     @final
     def process(self, value):
-        payloads = list(self.get_payloads())
+        payloads = list(self.get_payloads(value))
 
         if not payloads:
             self.terminate()
