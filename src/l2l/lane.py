@@ -172,7 +172,7 @@ class Lane(Generic[T], ABC):
         ):
             lane = cls.__get_lane(lane)
 
-            if lane != None:
+            if lane is not None:
                 yield lane
 
     @classmethod
@@ -203,12 +203,12 @@ class Lane(Generic[T], ABC):
         ):
             lane = cls.__get_lane(lane)
 
-            if lane != None:
+            if lane is not None:
                 yield lane
 
     @staticmethod
     def __get_lane(value: Union[Type["Lane"], str, None]):
-        if value == None:
+        if value is None:
             return None
 
         if isinstance(value, str):
@@ -765,7 +765,13 @@ class Lane(Generic[T], ABC):
                         yield result
 
             else:
-                yield self.process(value)
+                result = self.process(value)
+
+                if isgenerator(result):
+                    yield from result
+
+                else:
+                    yield result
 
         except Exception as e:
             self.__add_error(
@@ -935,6 +941,13 @@ class Lane(Generic[T], ABC):
         Lane.__global_errors_stacktrace = []
 
         lanes = [*Lane.get_primary_lanes(name)]
+        visible_lanes = filter(
+            lambda lane: not lane.hidden(),
+            lanes,
+        )
+
+        if not any(visible_lanes):
+            raise ValueError(f"No lanes found for '{name}'!")
 
         if print_lanes:
             Lane.print_available_lanes(
@@ -1011,7 +1024,7 @@ class Lane(Generic[T], ABC):
     ):
         text = item.first_name()
 
-        if name == None:
+        if name is None:
             return text
 
         if not item.primary():
@@ -1091,7 +1104,7 @@ class Lane(Generic[T], ABC):
         keyword: Optional[str],
         category: Any,
     ):
-        if keyword == None:
+        if keyword is None:
             keyword = "*"
 
         indent_text = " " * indent_size * indent_scale
