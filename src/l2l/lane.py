@@ -742,7 +742,11 @@ class Lane(Generic[T], ABC):
         """
         return value
 
-    def __process(self, value):
+    def __process(
+        self,
+        value,
+        processes: Optional[int],
+    ):
         self.__start_time = perf_counter()
 
         LOGGER().debug(
@@ -753,17 +757,27 @@ class Lane(Generic[T], ABC):
 
         try:
             if isgenerator(value):
-                for subvalue in value:
-                    if self.terminated:
-                        break
+                if processes is None:
+                    for subvalue in value:
+                        result = self.process(subvalue)
 
-                    result = self.process(subvalue)
+                        if isgenerator(result):
+                            yield from result
 
-                    if isgenerator(result):
-                        yield from result
+                        else:
+                            yield result
 
-                    else:
-                        yield result
+                else:
+                    with ThreadPool(processes=processes) as pool:
+                        for result in pool.map(
+                            self.process,
+                            value,
+                        ):
+                            if isgenerator(result):
+                                yield from result
+
+                            else:
+                                yield result
 
             else:
                 result = self.process(value)
@@ -793,7 +807,11 @@ class Lane(Generic[T], ABC):
         )
 
     @final
-    def run(self, value: Any = None):
+    def run(
+        self,
+        value: Any = None,
+        processes: Optional[int] = None,
+    ):
         """Executes this lane with the given input value.
 
         This is the main entry point for running a lane. The method:
@@ -834,14 +852,20 @@ class Lane(Generic[T], ABC):
         self.__run_count += 1
 
         for sub_lane in self.get_before_lanes():
-            new_value = sub_lane().run(value)
+            new_value = sub_lane().run(
+                value=value,
+                processes=processes,
+            )
 
             if self.terminated:
                 return value
 
             value = new_value
 
-        new_value = self.__process(value)
+        new_value = self.__process(
+            value=value,
+            processes=processes,
+        )
 
         if self.terminated:
             return value
@@ -849,7 +873,10 @@ class Lane(Generic[T], ABC):
         value = new_value
 
         for sub_lane in self.get_after_lanes():
-            new_value = sub_lane().run(value)
+            new_value = sub_lane().run(
+                value=value,
+                processes=processes,
+            )
 
             if self.terminated:
                 return value
@@ -963,7 +990,10 @@ class Lane(Generic[T], ABC):
 
         if processes is None:
             for lane in lanes:
-                result = lane.run(None)
+                result = lane.run(
+                    value=None,
+                    processes=processes,
+                )
 
                 if isgenerator(result):
                     yield from result
@@ -971,14 +1001,17 @@ class Lane(Generic[T], ABC):
 
                 yield result
 
-        with ThreadPool(processes=processes) as pool:
-            for lane in lanes:
-                result = pool.apply(lane.run, args=(None,))
+        for lane in lanes:
+            result = lane.run(
+                value=None,
+                processes=processes,
+            )
 
-                if isgenerator(result):
-                    yield from result
+            if isgenerator(result):
+                yield from result
+                continue
 
-                yield result
+            yield result
 
     @staticmethod
     @final
