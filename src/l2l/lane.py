@@ -2,6 +2,7 @@ import re
 import traceback
 from abc import ABC
 from inspect import isgenerator
+from multiprocessing.pool import ThreadPool
 from time import perf_counter
 from typing import (
     Any,
@@ -906,6 +907,7 @@ class Lane(Generic[T], ABC):
         name: str,
         print_lanes=True,
         print_indent=2,
+        processes: Optional[int] = None,
     ):
         """Starts all primary lanes matching the given name and yields their results.
 
@@ -959,14 +961,24 @@ class Lane(Generic[T], ABC):
                 lanes,
             )
 
-        for lane in lanes:
-            result = lane.run(None)
+        if processes is None:
+            for lane in lanes:
+                result = lane.run(None)
 
-            if isgenerator(result):
-                yield from result
-                continue
+                if isgenerator(result):
+                    yield from result
+                    continue
 
-            yield result
+                yield result
+
+        with ThreadPool(processes=processes) as pool:
+            for lane in lanes:
+                result = pool.apply(lane.run, args=(None,))
+
+                if isgenerator(result):
+                    yield from result
+
+                yield result
 
     @staticmethod
     @final
