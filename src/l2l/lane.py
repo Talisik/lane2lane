@@ -26,6 +26,7 @@ T = TypeVar("T")
 
 
 class Lane(Generic[T], ABC):
+    multiprocessing: bool = True
     lanes: Dict[int, Union[Type["Lane"], str, None]] = {}
     """
     A dictionary of lane classes, indexed by their priority number.
@@ -757,7 +758,7 @@ class Lane(Generic[T], ABC):
 
         try:
             if isgenerator(value):
-                if processes is None:
+                if processes is None or not self.multiprocessing:
                     for subvalue in value:
                         result = self.process(subvalue)
 
