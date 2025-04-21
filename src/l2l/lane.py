@@ -1010,6 +1010,8 @@ class Lane(Generic[T], ABC):
 
                 yield result
 
+            return
+
         for lane in lanes:
             result = lane.run(
                 value=None,
