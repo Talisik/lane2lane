@@ -27,6 +27,14 @@ T = TypeVar("T")
 
 class Lane(Generic[T], ABC):
     multiprocessing: bool = True
+    """
+    Determines how multiprocessing is handled for this lane.
+
+    - "no": No multiprocessing is used.
+    - "ordered": Multiprocessing is used with ordered results.
+    - "unordered": Multiprocessing is used with unordered results.
+    """
+
     lanes: Dict[int, Union[Type["Lane"], str, None]] = {}
     """
     A dictionary of lane classes, indexed by their priority number.
