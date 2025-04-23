@@ -77,7 +77,7 @@ class Lane(Generic[T], ABC):
 
         LOGGER().debug(
             "N-%d %s initialized.",
-            self.__run_count,
+            self.__class__.__run_count,
             self.first_name(),
         )
 
@@ -100,7 +100,7 @@ class Lane(Generic[T], ABC):
 
         LOGGER().debug(
             "N-%d %s terminated.",
-            self.__run_count,
+            self.__class__.__run_count,
             self.first_name(),
         )
 
@@ -760,7 +760,7 @@ class Lane(Generic[T], ABC):
 
         LOGGER().debug(
             "N-%d %s started.",
-            self.__run_count,
+            self.__class__.__run_count,
             self.first_name(),
         )
 
@@ -810,7 +810,7 @@ class Lane(Generic[T], ABC):
 
         LOGGER().debug(
             "N-%d %s done in %ss.",
-            self.__run_count,
+            self.__class__.__run_count,
             self.first_name(),
             f"{self.duration:.2f}",
         )
@@ -858,7 +858,7 @@ class Lane(Generic[T], ABC):
             get_after_lanes: Method that retrieves 'after' lanes.
             terminate: Method that can be called to stop processing.
         """
-        self.__run_count += 1
+        self.__class__.__run_count += 1
 
         for sub_lane in self.get_before_lanes():
             new_value = sub_lane().run(
