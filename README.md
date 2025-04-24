@@ -7,14 +7,18 @@ For detailed documentation, check out our [Wiki](https://github.com/Talisik/lane
 ## Installation
 
 ```bash
+pip install lane2lane
+```
+
+```bash
 pip install git+https://github.com/Talisik/lane2lane.git
 ```
 
 ## Requirements
 
-- Python 3.8+
-- fun-things
-- simple-chalk
+-   Python 3.8+
+-   fun-things
+-   simple-chalk
 
 ## Quick Start
 
@@ -51,15 +55,15 @@ for result in results:
 
 A Lane is a processing unit that can transform or act on data. Lanes can be:
 
-- **Primary Lanes**: Entry points that can be directly executed
-- **Regular Lanes**: Processing stages that run as part of a lane chain
+-   **Primary Lanes**: Entry points that can be directly executed
+-   **Regular Lanes**: Processing stages that run as part of a lane chain
 
 ### Lane Ordering
 
 Lanes are executed in a specific order defined by:
 
-- **Priority**: Integer values that determine execution order
-- **Before/After Relationships**: Negative priorities run before, positive priorities run after
+-   **Priority**: Integer values that determine execution order
+-   **Before/After Relationships**: Negative priorities run before, positive priorities run after
 
 ## Basic Usage
 
@@ -107,7 +111,7 @@ class MyPrimaryLane(Lane):
 
 ### Defining Lane Order
 
-Lanes can specify other lanes to run before or after them:
+Lanes can specify other lanes to run before and after them:
 
 ```python
 class MainLane(PrimaryLane):
@@ -144,7 +148,7 @@ Subscriber is a pre-defined lane class that provides a standard way to generate 
 from l2l import Subscriber
 
 class DataSourceLane(Subscriber):
-    def get_payloads(self):
+    def get_payloads(self, value):
         # Fetch data from some source
         data = fetch_data_from_source()
         for item in data:
@@ -190,6 +194,40 @@ class OneTimeLane(Lane):
         return 1  # Run this lane only once
 ```
 
+### Multiprocessing Support
+
+Lane2Lane supports multiprocessing for parallel data processing:
+
+```python
+class ParallelProcessingLane(Lane):
+    multiprocessing = True  # Enable multiprocessing for this lane
+
+    def process(self, value):
+        # Process data in parallel
+        # Each yielded item will be processed by subsequent lanes
+        yield processed_item
+```
+
+### Error Handling
+
+Lanes provide built-in error handling capabilities:
+
+```python
+class ErrorHandlingLane(Lane):
+    @classmethod
+    def terminate_on_error(cls):
+        return True  # Stop processing on error (default behavior)
+
+    def process(self, value):
+        try:
+            # Process data
+            yield processed_data
+        except Exception as e:
+            # Access errors with self.errors
+            # Global errors available via Lane.global_errors()
+            pass
+```
+
 ## Complete Example
 
 Here's a complete example showing a data processing pipeline:
@@ -199,7 +237,7 @@ from l2l import Lane, PrimaryLane, Subscriber
 
 # Data source that fetches records
 class DataSourceLane(Subscriber):
-    def get_payloads(self):
+    def get_payloads(self, value):
         data = [
             {"id": 1, "name": "Alice", "score": 85},
             {"id": 2, "name": "Bob", "score": 92},
