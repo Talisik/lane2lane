@@ -130,6 +130,11 @@ class MainLane(PrimaryLane):
         return transform_data(value)
 ```
 
+The priority numbers determine the execution order:
+
+-   Negative priorities: Lanes that run before this lane (more negative runs first)
+-   Positive priorities: Lanes that run after this lane (higher positive runs first)
+
 ### Running Lanes
 
 ```python
@@ -192,6 +197,36 @@ class OneTimeLane(Lane):
     @classmethod
     def max_run_count(cls) -> int:
         return 1  # Run this lane only once
+```
+
+### Process All Values
+
+Control whether all items should be processed before passing to the next lane:
+
+```python
+class BatchProcessingLane(Lane):
+    process_all = True  # Process all items before passing to the next lane
+
+    def process(self, value):
+        # When process_all is True, all items will be processed by this lane
+        # before any are passed to subsequent lanes
+        yield processed_value
+```
+
+When `process_all` is False (default), each item is processed through the entire lane chain before the next item starts processing.
+
+### Terminating Lane Execution
+
+You can manually terminate a lane's execution:
+
+```python
+class TerminatingLane(Lane):
+    def process(self, value):
+        if some_condition:
+            self.terminate()  # Stop processing this lane
+            return
+
+        yield processed_value
 ```
 
 ### Multiprocessing Support

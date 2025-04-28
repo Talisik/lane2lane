@@ -26,6 +26,7 @@ T = TypeVar("T")
 
 
 class Lane(Generic[T], ABC):
+    process_all: bool = False
     multiprocessing: bool = True
     """
     Determines how multiprocessing is handled for this lane.
@@ -767,14 +768,25 @@ class Lane(Generic[T], ABC):
         try:
             if isgenerator(value):
                 if processes is None or not self.multiprocessing:
-                    for subvalue in value:
-                        result = self.process(subvalue)
+                    if self.process_all:
+                        data: Any = [*value]
+                        result = self.process(data)
 
                         if isgenerator(result):
                             yield from result
 
                         else:
                             yield result
+
+                    else:
+                        for subvalue in value:
+                            result = self.process(subvalue)
+
+                            if isgenerator(result):
+                                yield from result
+
+                            else:
+                                yield result
 
                 else:
                     with ThreadPool(processes=processes) as pool:
