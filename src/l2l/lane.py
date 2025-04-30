@@ -146,7 +146,27 @@ class Lane(Generic[T], ABC):
         return self.__terminated
 
     @classmethod
-    def __get_lanes(cls):
+    def get_lanes(cls):
+        """Retrieves all lanes associated with this lane class and its parent classes.
+
+        This method collects all lanes from the current class's `lanes` dictionary and
+        merges them with lanes from all parent Lane classes. This provides a complete
+        view of all lanes in the inheritance hierarchy.
+
+        Returns:
+            dict: A dictionary mapping priority numbers to lane classes, combining
+                  lanes from this class and all parent Lane classes.
+
+        Example:
+            ```python
+            # Get all lanes associated with MyLane and its parent classes
+            all_lanes = MyLane.get_lanes()
+            ```
+
+        See Also:
+            get_before_lanes: Method that filters to only lanes with negative priority.
+            get_after_lanes: Method that filters to only lanes with non-negative priority.
+        """
         lanes = {**cls.lanes}
 
         for base in cls.__mro__[1:]:
@@ -177,7 +197,7 @@ class Lane(Generic[T], ABC):
         for _, lane in sorted(
             filter(
                 lambda v: v[0] < 0,
-                cls.__get_lanes().items(),
+                cls.get_lanes().items(),
             ),
             key=lambda v: v[0],
         ):
@@ -208,7 +228,7 @@ class Lane(Generic[T], ABC):
         for _, lane in sorted(
             filter(
                 lambda v: v[0] >= 0,
-                cls.__get_lanes().items(),
+                cls.get_lanes().items(),
             ),
             key=lambda v: v[0],
         ):
