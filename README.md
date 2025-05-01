@@ -142,7 +142,7 @@ The priority numbers determine the execution order:
 result = Lane.start("MAIN_LANE")
 
 # Start all primary lanes that match a name
-results = Lane.start_all("MAIN")
+results = [*Lane.start("MAIN")]
 ```
 
 ## Subscriber Example

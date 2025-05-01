@@ -669,7 +669,6 @@ class Lane(Generic[T], ABC):
         return sorted(
             filter(Lane.__lane_predicate, Lane.all_lanes()),
             key=lambda descendant: descendant.priority_number(),
-            reverse=True,
         )
 
     @staticmethod
@@ -936,49 +935,6 @@ class Lane(Generic[T], ABC):
 
     @staticmethod
     @final
-    def start_all(
-        name: str,
-        print_lanes=True,
-        print_indent=2,
-    ):
-        """Starts all primary lanes matching the given name and returns results as a list.
-
-        This is a convenience wrapper around the `start` method that collects all results
-        into a list rather than yielding them as an iterator.
-
-        Args:
-            name: The name to match against lane conditions.
-            print_lanes: Whether to print available lanes and the execution order.
-                          Defaults to True.
-            print_indent: Indentation level for printing lane information.
-                          Defaults to 2.
-
-        Returns:
-            list: A list containing all results from matching primary lanes.
-
-        Example:
-            ```python
-            # Run all lanes matching "PROCESS_DATA" and collect results in a list
-            results = Lane.start_all("PROCESS_DATA")
-
-            # Run quietly (no lane listings printed)
-            results = Lane.start_all("PROCESS_DATA", print_lanes=False)
-            ```
-
-        See Also:
-            start: The underlying method that actually starts the lanes.
-            get_primary_lanes: Method that finds lanes to execute.
-        """
-        return [
-            *Lane.start(
-                name,
-                print_lanes,
-                print_indent,
-            )
-        ]
-
-    @staticmethod
-    @final
     def start(
         name: str,
         print_lanes=True,
@@ -1011,7 +967,6 @@ class Lane(Generic[T], ABC):
             ```
 
         See Also:
-            start_all: Method that collects all results into a list.
             get_primary_lanes: Method that finds lanes to execute.
             print_available_lanes: Method that shows available lanes.
         """
@@ -1069,7 +1024,7 @@ class Lane(Generic[T], ABC):
     def __print_load_order(
         lanes: List["Lane"],
     ):
-        if not any(lanes):
+        if not lanes:
             return
 
         print(
@@ -1150,7 +1105,6 @@ class Lane(Generic[T], ABC):
         lanes0: List[Type["Lane"]] = [lane[0] for lane in lanes]
         lanes0.sort(
             key=lambda lane: lane.priority_number(),
-            reverse=True,
         )
 
         count = len(lanes0)
