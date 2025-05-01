@@ -360,30 +360,31 @@ class Lane(Generic[T], ABC):
         return False
 
     @classmethod
-    def hidden(cls) -> bool:
-        """
-        Determines if this lane should be hidden from listings and documentation.
+    def passive(cls) -> bool:
+        """Determines if this lane should be hidden from listings and execution summaries.
 
-        Hidden lanes will not appear in the output of `print_available_lanes` and similar
-        listing methods, which can help reduce noise when there are many utility lanes
-        that shouldn't be directly accessed by users.
+        Passive lanes are still executed normally, but they don't appear in the output of
+        `print_available_lanes` or other diagnostic displays. This is useful for utility
+        lanes that perform background tasks but don't need to be visible to users.
 
-        By default, all lanes are visible. Subclasses should override this method to
-        return True if they should be hidden from lane listings.
+        By default, all lanes are visible (not passive). Subclasses should override this
+        method to return True if they should be hidden from listings.
 
         Returns:
-            bool: False by default. Override to return True to hide this lane from listings.
+            bool: False by default. Override to return True if this lane should be hidden
+                 from listings and execution summaries.
 
         Example:
             ```python
-            class UtilityLane(Lane):
+            class BackgroundLane(Lane):
                 @classmethod
-                def hidden(cls) -> bool:
-                    return True
+                def passive(cls) -> bool:
+                    return True  # Hide this lane from listings
             ```
 
         See Also:
-            print_available_lanes: Method that lists available lanes.
+            print_available_lanes: Method that respects the passive flag when displaying lanes.
+            primary: Method that determines if a lane is a primary entry point.
         """
         return False
 
@@ -1018,12 +1019,12 @@ class Lane(Generic[T], ABC):
         Lane.__global_errors_stacktrace = []
 
         lanes = [*Lane.get_primary_lanes(name)]
-        visible_lanes = filter(
-            lambda lane: not lane.hidden(),
+        active_lanes = filter(
+            lambda lane: not lane.passive(),
             lanes,
         )
 
-        if not any(visible_lanes):
+        if not any(active_lanes):
             raise ValueError(f"No lanes found for '{name}'!")
 
         if print_lanes:
@@ -1122,13 +1123,15 @@ class Lane(Generic[T], ABC):
         if name is None:
             return text
 
-        if not item.primary():
-            # Not primary.
-            text = chalk.dim.gray(text)
-
-        elif not item.condition(name):
+        if not item.condition(name):
             # Primary, but condition is not met.
+            text = chalk.dim.gray(text)
             text = f"{text} {chalk.bold('✕')}"
+
+        elif item.passive():
+            # Passive lane.
+            text = chalk.blue.bold(text)
+            text = f"{text} {chalk.bold('✓')}"
 
         else:
             # Primary lane.
@@ -1261,10 +1264,8 @@ class Lane(Generic[T], ABC):
                         lane,
                         lane.first_name(),
                     )
-                    for lane in filter(
-                        lambda lane: not lane.hidden(),
-                        Lane.available_lanes(),
-                    )
+                    for lane in Lane.available_lanes()
+                    if lane.primary()
                 ],
                 lambda tuple: tuple[1],
             ).items()
