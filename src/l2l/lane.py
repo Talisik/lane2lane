@@ -35,6 +35,13 @@ class Lane(Generic[T], ABC):
     - "ordered": Multiprocessing is used with ordered results.
     - "unordered": Multiprocessing is used with unordered results.
     """
+    use_filename: bool = False
+    """
+    Determines if the filename should be used as the lane name.
+
+    If True, the filename will be used as the lane name.
+    If False, the class name will be used as the lane name.
+    """
 
     lanes: Dict[int, Union[Type["Lane"], str, None]] = {}
     """
@@ -439,7 +446,7 @@ class Lane(Generic[T], ABC):
         yield re.sub(
             r"(?<=[a-z])(?=[A-Z0-9])|(?<=[A-Z0-9])(?=[A-Z][a-z])|(?<=[A-Za-z])(?=\d)",
             "_",
-            cls.__name__,
+            cls.__module__.split(".")[-1] if cls.use_filename else cls.__name__,
         ).upper()
 
     @classmethod
