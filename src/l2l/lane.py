@@ -7,9 +7,11 @@ from time import perf_counter
 from typing import (
     Any,
     Dict,
+    Generator,
     Generic,
     Iterable,
     List,
+    Literal,
     Optional,
     Type,
     TypeVar,
@@ -26,14 +28,23 @@ T = TypeVar("T")
 
 
 class Lane(Generic[T], ABC):
-    process_all: bool = False
+    process_mode: Union[Literal["all"], int] = 1
+    """
+    Controls how input values are processed.
+    
+    If set to "all", the entire input collection is processed as a single batch.
+    If set to an integer > 1, input is processed in batches of that size.
+    If set to 1 (default), each item is processed individually.
+    """
+
     multiprocessing: bool = True
     """
-    Determines how multiprocessing is handled for this lane.
-
-    - "no": No multiprocessing is used.
-    - "ordered": Multiprocessing is used with ordered results.
-    - "unordered": Multiprocessing is used with unordered results.
+    Determines whether to use multiprocessing for handling generator inputs.
+    
+    If True, generator inputs will be processed using a ThreadPool when processes are specified.
+    If False, generator inputs will be processed sequentially.
+    
+    Note: This feature is not compatible with `process_mode`.
     """
     use_filename: bool = False
     """
@@ -779,6 +790,66 @@ class Lane(Generic[T], ABC):
         """
         return value
 
+    def __process_batch(
+        self,
+        value,
+        max_count: int,
+    ) -> Generator[Any, None, None]:
+        count = 0
+        result = []
+
+        for subvalue in value:
+            result.append(subvalue)
+            count += 1
+
+            if count < max_count:
+                continue
+
+            yield result
+
+            result = []
+            count = 0
+
+        if result:
+            yield result
+
+    def __process_value(self, value):
+        if self.process_mode == "all":
+            data: Any = [*value]
+            result = self.process(data)
+
+            if isgenerator(result):
+                yield from result
+
+            else:
+                yield result
+
+            return
+
+        if self.process_mode > 1:
+            for result in self.__process_batch(
+                value,
+                self.process_mode,
+            ):
+                result = self.process(result)
+
+                if isgenerator(result):
+                    yield from result
+
+                else:
+                    yield result
+
+            return
+
+        for subvalue in value:
+            result = self.process(subvalue)
+
+            if isgenerator(result):
+                yield from result
+
+            else:
+                yield result
+
     def __process(
         self,
         value,
@@ -795,30 +866,12 @@ class Lane(Generic[T], ABC):
         try:
             if isgenerator(value):
                 if processes is None or not self.multiprocessing:
-                    if self.process_all:
-                        data: Any = [*value]
-                        result = self.process(data)
-
-                        if isgenerator(result):
-                            yield from result
-
-                        else:
-                            yield result
-
-                    else:
-                        for subvalue in value:
-                            result = self.process(subvalue)
-
-                            if isgenerator(result):
-                                yield from result
-
-                            else:
-                                yield result
+                    yield from self.__process_value(value)
 
                 else:
                     with ThreadPool(processes=processes) as pool:
                         for result in pool.map(
-                            self.process,
+                            self.__process_value,
                             value,
                         ):
                             if isgenerator(result):
