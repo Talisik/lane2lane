@@ -28,13 +28,15 @@ T = TypeVar("T")
 
 
 class Lane(Generic[T], ABC):
-    process_mode: Union[Literal["all"], int] = 1
+    process_mode: Union[Literal["all", "one"], int] = "one"
     """
     Controls how input values are processed.
     
-    If set to "all", the entire input collection is processed as a single batch.
-    If set to an integer > 1, input is processed in batches of that size.
-    If set to 1 (default), each item is processed individually.
+    If set to `"all"`, the entire input collection is processed as a single batch.
+
+    If set to `integer`, input is processed in batches of that size.
+
+    If set to `"one"`, each item is processed individually.
     """
 
     multiprocessing: bool = True
@@ -800,6 +802,7 @@ class Lane(Generic[T], ABC):
 
         for subvalue in value:
             result.append(subvalue)
+
             count += 1
 
             if count < max_count:
@@ -824,9 +827,17 @@ class Lane(Generic[T], ABC):
             else:
                 yield result
 
-            return
+        elif self.process_mode == "one":
+            for subvalue in value:
+                result = self.process(subvalue)
 
-        if self.process_mode > 1:
+                if isgenerator(result):
+                    yield from result
+
+                else:
+                    yield result
+
+        else:
             for result in self.__process_batch(
                 value,
                 self.process_mode,
@@ -838,17 +849,6 @@ class Lane(Generic[T], ABC):
 
                 else:
                     yield result
-
-            return
-
-        for subvalue in value:
-            result = self.process(subvalue)
-
-            if isgenerator(result):
-                yield from result
-
-            else:
-                yield result
 
     def __process(
         self,
