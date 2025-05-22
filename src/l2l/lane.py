@@ -23,6 +23,7 @@ from fun_things import categorizer, get_all_descendant_classes, load_modules
 from simple_chalk import chalk
 
 from .constants import LOGGER
+from .errors import LaneNotFoundError
 
 T = TypeVar("T")
 
@@ -593,36 +594,41 @@ class Lane(Generic[T], ABC):
 
     @staticmethod
     @final
-    def get_lane(classname: str):
-        """Retrieves a lane instance by its class name.
+    def get_lane(name: str):
+        """Retrieves a lane class by its name.
 
-        Searches through all descendant lane classes to find one matching the specified
-        class name. This is useful for getting a specific lane by name for inspection
-        or when you need to reference a lane dynamically.
+        Searches through all descendant lane classes to find one matching either the exact
+        class name or one of its registered names. This is useful for getting a specific
+        lane by name for inspection or when you need to reference a lane dynamically.
 
         Args:
-            classname: The exact class name of the lane to retrieve (case-sensitive).
+            name: The name to search for. Can be either the exact class name or one of
+                 the lane's registered names (case-sensitive).
 
         Returns:
-            Lane: The first lane with a matching class name, or None if not found.
+            Type[Lane]: The first matching lane class, or None if not found.
 
         Example:
             ```python
             # Get a lane by its class name
             cleanup_lane = Lane.get_lane("CleanupLane")
             if cleanup_lane:
-                cleanup_lane.run()
+                cleanup_lane().run()  # Note: Need to instantiate the class
             ```
 
         Note:
-            This method returns an actual class, not an instance. To use the lane,
-            you'll need to instantiate it first.
+            This method returns a class, not an instance. You must instantiate the
+            returned class before using it.
 
         See Also:
             all_lanes: Method that returns all descendant lane classes.
+            name: Method that provides the registered names for a lane.
         """
         for lane in Lane.all_lanes():
-            if lane.__name__ == classname:
+            if lane.__name__ == name:
+                return lane
+
+            if name in lane.name():
                 return lane
 
     @staticmethod
@@ -906,6 +912,25 @@ class Lane(Generic[T], ABC):
             self.first_name(),
             f"{self.duration:.2f}",
         )
+
+    @final
+    def goto(
+        self,
+        lane: Union[str, Type["Lane"]],
+        value: Any,
+    ):
+        cls = self.__get_lane(lane)
+
+        if not cls:
+            raise LaneNotFoundError(lane)
+
+        result = cls().run(value)
+
+        if isgenerator(result):
+            yield from result
+
+        else:
+            return result
 
     @final
     def run(
