@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Iterable, TypeVar, final
 
-from .constants import LOGGER
+from loguru import logger
+
 from .lane import Lane
 
 T = TypeVar("T")
@@ -20,8 +21,8 @@ class Subscriber(Lane[T], ABC):
             self.terminate()
 
         else:
-            LOGGER().info(
-                "Got %d payload(s).",
+            logger.info(
+                "Got {0} payload(s).",
                 len(payloads),
             )
 
