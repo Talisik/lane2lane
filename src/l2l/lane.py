@@ -802,6 +802,36 @@ class Lane(Generic[T], ABC):
         """
         return value
 
+    def __process_special(
+        self,
+        value,
+        processes: Optional[int],
+    ):
+        if value is STOP:
+            return
+
+        if isinstance(value, Action):
+            if value.name == "goto":
+                lane: Type[Lane] = value.kwargs["lane"]
+                action_value = value.kwargs["value"]
+
+                if action_value is not UNDEFINED:
+                    value = action_value
+
+                yield from lane(self.__primary_lane).run(
+                    value,
+                    processes,
+                )
+                return
+
+            raise UnknownActionError(value)
+
+        if isgenerator(value):
+            yield from value
+            return
+
+        yield value
+
     def __process_batch(
         self,
         value,
@@ -852,37 +882,33 @@ class Lane(Generic[T], ABC):
             raise UnknownActionError(value)
 
         if self.process_mode == "all":
-            data: Any = [*value]
-            result = self.process(data)
+            subvalues: Any = [*value]
 
-            if isgenerator(result):
-                yield from result
-
-            else:
-                yield result
+            yield from self.__process_special(
+                self.process(subvalues),
+                processes,
+            )
 
         elif self.process_mode == "one":
-            for subvalue in value:
-                result = self.process(subvalue)
-
-                if isgenerator(result):
-                    yield from result
-
-                else:
-                    yield result
+            yield from (
+                self.__process_special(
+                    self.process(subvalue),
+                    processes,
+                )
+                for subvalue in value
+            )
 
         else:
-            for result in self.__process_batch(
-                value,
-                self.process_mode,
-            ):
-                result = self.process(result)
-
-                if isgenerator(result):
-                    yield from result
-
-                else:
-                    yield result
+            yield from (
+                self.__process_special(
+                    self.process(subvalue),
+                    processes,
+                )
+                for subvalue in self.__process_batch(
+                    value,
+                    self.process_mode,
+                )
+            )
 
     def __process(
         self,
