@@ -1,13 +1,14 @@
-from typing import Type, Union
+from typing import TYPE_CHECKING, Type, Union
 
-from l2l.types import UNDEFINED
-
-from ..lane import Lane
+from ..types import UNDEFINED
 from .action import Action
+
+if TYPE_CHECKING:
+    from ..lane import Lane
 
 
 def GOTO(
-    lane: Union[Type[Lane], str, None],
+    lane: Union[Type["Lane"], str, None],
     value=UNDEFINED,
 ):
     if isinstance(lane, str):
