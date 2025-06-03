@@ -1,6 +1,3 @@
-from .action import Action
-
-
 class LaneNotFoundError(Exception):
     """Raised when a requested lane cannot be found.
 
@@ -14,16 +11,3 @@ class LaneNotFoundError(Exception):
     def __init__(self, lane_name):
         self.lane_name = lane_name
         super().__init__(f"Lane '{lane_name}' not found!")
-
-
-class UnknownActionError(Exception):
-    """Raised when an unknown action is encountered.
-
-    This error is raised when an action is encountered that is not recognized
-    by the system.
-    """
-
-    def __init__(self, action: Action):
-        self.action = action
-
-        super().__init__(f"Unknown action: {action.name}")
