@@ -13,7 +13,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -24,10 +23,7 @@ from fun_things import categorizer, get_all_descendant_classes, load_modules
 from loguru import logger
 from simple_chalk import chalk
 
-from l2l.types import UNDEFINED
-
-from .action import STOP, Action
-from .errors import UnknownActionError
+from .errors import LaneNotFoundError
 
 T = TypeVar("T")
 
@@ -44,7 +40,7 @@ class Lane(Generic[T], ABC):
     If set to `"one"`, each item is processed individually.
     """
 
-    multiprocessing: bool = False
+    multiprocessing: bool = True
     """
     Determines whether to use multiprocessing for handling generator inputs.
     
@@ -168,7 +164,7 @@ class Lane(Generic[T], ABC):
     @property
     @final
     def terminated(self):
-        return self.__terminated
+        return (self.primary_lane or self).__terminated
 
     @classmethod
     def get_lanes(cls):
@@ -293,27 +289,27 @@ class Lane(Generic[T], ABC):
     @property
     @final
     def errors_count(self):
-        return len((self.__primary_lane or self).__errors)
+        return len((self.primary_lane or self).__errors)
 
     @property
     @final
     def errors(self):
-        yield from (self.__primary_lane or self).__errors
+        yield from (self.primary_lane or self).__errors
 
     @property
     @final
     def errors_str(self):
-        return (str(error) for error in (self.__primary_lane or self).__errors)
+        return (str(error) for error in (self.primary_lane or self).__errors)
 
     @property
     @final
     def errors_stacktrace(self):
-        yield from (self.__primary_lane or self).__errors_stacktrace
+        yield from (self.primary_lane or self).__errors_stacktrace
 
     @final
     def __add_error(self, error: Exception, stacktrace: str):
-        (self.__primary_lane or self).__errors.append(error)
-        (self.__primary_lane or self).__errors_stacktrace.append(stacktrace)
+        (self.primary_lane or self).__errors.append(error)
+        (self.primary_lane or self).__errors_stacktrace.append(stacktrace)
         self.__global_errors.append(error)
         self.__global_errors_stacktrace.append(stacktrace)
 
@@ -802,36 +798,6 @@ class Lane(Generic[T], ABC):
         """
         return value
 
-    def __process_special(
-        self,
-        value,
-        processes: Optional[int],
-    ):
-        if value is STOP:
-            return
-
-        if isinstance(value, Action):
-            if value.name == "goto":
-                lane: Type[Lane] = value.kwargs["lane"]
-                action_value = value.kwargs["value"]
-
-                if action_value is not UNDEFINED:
-                    value = action_value
-
-                yield from lane(self.__primary_lane).run(
-                    value,
-                    processes,
-                )
-                return
-
-            raise UnknownActionError(value)
-
-        if isgenerator(value):
-            yield from value
-            return
-
-        yield value
-
     def __process_batch(
         self,
         value,
@@ -856,59 +822,39 @@ class Lane(Generic[T], ABC):
         if result:
             yield result
 
-    def __process_value(
-        self,
-        args: Tuple[Any, Optional[int]],
-    ):
-        value, processes = args
-
-        if value is STOP:
-            return
-
-        if isinstance(value, Action):
-            if value.name == "goto":
-                lane: Type[Lane] = value.kwargs["lane"]
-                action_value = value.kwargs["value"]
-
-                if action_value is not UNDEFINED:
-                    value = action_value
-
-                yield from lane(self.__primary_lane).run(
-                    value,
-                    processes,
-                )
-                return
-
-            raise UnknownActionError(value)
-
+    def __process_generator(self, value):
         if self.process_mode == "all":
-            subvalues: Any = [*value]
+            data: Any = [*value]
+            result = self.process(data)
 
-            yield from self.__process_special(
-                self.process(subvalues),
-                processes,
-            )
+            if isgenerator(result):
+                yield from result
+
+            else:
+                yield result
 
         elif self.process_mode == "one":
-            yield from (
-                self.__process_special(
-                    self.process(subvalue),
-                    processes,
-                )
-                for subvalue in value
-            )
+            for subvalue in value:
+                result = self.process(subvalue)
+
+                if isgenerator(result):
+                    yield from result
+
+                else:
+                    yield result
 
         else:
-            yield from (
-                self.__process_special(
-                    self.process(subvalue),
-                    processes,
-                )
-                for subvalue in self.__process_batch(
-                    value,
-                    self.process_mode,
-                )
-            )
+            for result in self.__process_batch(
+                value,
+                self.process_mode,
+            ):
+                result = self.process(result)
+
+                if isgenerator(result):
+                    yield from result
+
+                else:
+                    yield result
 
     def __process(
         self,
@@ -925,19 +871,14 @@ class Lane(Generic[T], ABC):
 
         try:
             if isgenerator(value):
-                if not self.multiprocessing:
-                    yield from self.__process_value(
-                        (
-                            value,
-                            processes,
-                        )
-                    )
+                if processes is None or not self.multiprocessing:
+                    yield from self.__process_generator(value)
 
                 else:
                     with ThreadPool(processes=processes) as pool:
                         for result in pool.map(
-                            self.__process_value,
-                            ((subvalue, processes) for subvalue in value),
+                            self.__process_generator,
+                            value,
                         ):
                             if isgenerator(result):
                                 yield from result
@@ -960,10 +901,10 @@ class Lane(Generic[T], ABC):
                 traceback.format_exc(),
             )
 
+            logger.exception(e)
+
             if self.terminate_on_error():
                 self.terminate()
-
-            traceback.print_exc()
 
         logger.debug(
             "N-{0} {1} done in {2:.2f}s.",
@@ -971,6 +912,25 @@ class Lane(Generic[T], ABC):
             self.first_name(),
             self.duration,
         )
+
+    @final
+    def goto(
+        self,
+        lane: Union[str, Type["Lane"]],
+        value: Any,
+    ):
+        cls = self.__get_lane(lane)
+
+        if not cls:
+            raise LaneNotFoundError(lane)
+
+        result = cls().run(value)
+
+        if isgenerator(result):
+            yield from result
+
+        else:
+            return result
 
     @final
     def run(
