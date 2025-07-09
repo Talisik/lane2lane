@@ -1,12 +1,12 @@
 import re
 import traceback
 from abc import ABC
+from collections import deque
 from inspect import isgenerator
 from multiprocessing.pool import ThreadPool
 from time import perf_counter
 from typing import (
     Any,
-    Dict,
     Generator,
     Generic,
     Iterable,
@@ -23,7 +23,10 @@ from fun_things import categorizer, get_all_descendant_classes, load_modules
 from loguru import logger
 from simple_chalk import chalk
 
+from .directions import Fork, LaneDirection
 from .errors import LaneNotFoundError
+from .types import LaneDictType
+from .utils import from_lane_reference, get_lane
 
 T = TypeVar("T")
 
@@ -57,7 +60,7 @@ class Lane(Generic[T], ABC):
     If False, the class name will be used as the lane name.
     """
 
-    lanes: Dict[int, Union[Type["Lane"], str, None]] = {}
+    lanes: LaneDictType = {}
     """
     A dictionary of lane classes, indexed by their priority number.
 
@@ -222,7 +225,7 @@ class Lane(Generic[T], ABC):
             ),
             key=lambda v: v[0],
         ):
-            lane = cls.__get_lane(lane)
+            lane = from_lane_reference(lane)
 
             if lane is not None:
                 yield lane
@@ -253,20 +256,10 @@ class Lane(Generic[T], ABC):
             ),
             key=lambda v: v[0],
         ):
-            lane = cls.__get_lane(lane)
+            lane = from_lane_reference(lane)
 
             if lane is not None:
                 yield lane
-
-    @staticmethod
-    def __get_lane(value: Union[Type["Lane"], str, None]):
-        if value is None:
-            return None
-
-        if isinstance(value, str):
-            return Lane.get_lane(value)
-
-        return value
 
     @property
     @final
@@ -919,7 +912,7 @@ class Lane(Generic[T], ABC):
         lane: Union[str, Type["Lane"]],
         value: Any,
     ):
-        cls = self.__get_lane(lane)
+        cls = get_lane(lane)
 
         if not cls:
             raise LaneNotFoundError(lane)
@@ -931,6 +924,83 @@ class Lane(Generic[T], ABC):
 
         else:
             return result
+
+    def __from_lane_direction(
+        self,
+        value,
+        direction: "LaneDirection",
+        processes: Optional[int],
+    ):
+        if isinstance(direction, Fork):
+            original_value = value
+            new_value = value
+
+            if isgenerator(value):
+                deconstructed_value = [*value]
+                original_value = (v for v in deconstructed_value)
+                new_value = (v for v in deconstructed_value)
+
+            for _, lane in sorted(
+                direction.lanes.items(),
+                key=lambda v: v[0],
+            ):
+                if self.terminated:
+                    break
+
+                lane = from_lane_reference(lane)
+
+                if lane is None:
+                    continue
+
+                if isinstance(lane, LaneDirection):
+                    new_value = self.__from_lane_direction(
+                        value=new_value,
+                        direction=lane,
+                        processes=processes,
+                    )
+                    continue
+
+                new_value = lane().run(
+                    value=new_value,
+                    processes=processes,
+                )
+
+            if direction.isolated:
+                if isgenerator(new_value):
+                    deque(new_value, maxlen=0)
+
+                return original_value
+
+            return new_value
+
+        return value
+
+    def __process_sub_lanes(
+        self,
+        value,
+        sub_lanes: Iterable[Union["LaneDirection", Type["Lane"]]],
+        processes: Optional[int],
+    ):
+        new_value = value
+
+        for sub_lane in sub_lanes:
+            if self.terminated:
+                break
+
+            if isinstance(sub_lane, LaneDirection):
+                new_value = self.__from_lane_direction(
+                    value=new_value,
+                    direction=sub_lane,
+                    processes=processes,
+                )
+
+            else:
+                new_value = sub_lane().run(
+                    value=new_value,
+                    processes=processes,
+                )
+
+        return new_value
 
     @final
     def run(
@@ -977,18 +1047,16 @@ class Lane(Generic[T], ABC):
         """
         self.__class__.__run_count += 1
 
-        for sub_lane in self.get_before_lanes():
-            new_value = sub_lane().run(
-                value=value,
-                processes=processes,
-            )
+        value = self.__process_sub_lanes(
+            value=value,
+            sub_lanes=self.get_before_lanes(),
+            processes=processes,
+        )
 
-            if self.terminated:
-                return value
+        if self.terminated:
+            return value
 
-            value = new_value
-
-        new_value = self.__process(
+        value = self.__process(
             value=value,
             processes=processes,
         )
@@ -996,20 +1064,11 @@ class Lane(Generic[T], ABC):
         if self.terminated:
             return value
 
-        value = new_value
-
-        for sub_lane in self.get_after_lanes():
-            new_value = sub_lane().run(
-                value=value,
-                processes=processes,
-            )
-
-            if self.terminated:
-                return value
-
-            value = new_value
-
-        return value
+        return self.__process_sub_lanes(
+            value=value,
+            sub_lanes=self.get_after_lanes(),
+            processes=processes,
+        )
 
     @staticmethod
     @final
