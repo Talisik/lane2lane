@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING, Type, Union
 
-from .directions import Fork, LaneDirection
+from .mock import Mock
 from .types import LaneReferenceType
 
 if TYPE_CHECKING:
@@ -18,13 +18,12 @@ def get_lane(value: Union[Type["Lane"], str, None]):
 
 
 def from_lane_reference(lane: LaneReferenceType):
-    if isinstance(lane, LaneDirection):
-        return lane
-
     if isinstance(lane, dict):
-        return Fork(
+        return Mock(
             lanes=lane,
-            isolated=False,
         )
+
+    if isinstance(lane, Mock):
+        return lane
 
     return get_lane(lane)

@@ -11,7 +11,6 @@ from typing import (
     Generic,
     Iterable,
     List,
-    Literal,
     Optional,
     Type,
     TypeVar,
@@ -23,16 +22,20 @@ from fun_things import categorizer, get_all_descendant_classes, load_modules
 from loguru import logger
 from simple_chalk import chalk
 
-from .directions import Fork, LaneDirection
 from .errors import LaneNotFoundError
-from .types import LaneDictType
+from .mock import Mock
+from .types import LaneDictType, ProcessModeType
 from .utils import from_lane_reference, get_lane
 
 T = TypeVar("T")
 
 
-class Lane(Generic[T], ABC):
-    process_mode: Union[Literal["all", "one"], int] = "one"
+class Lane(Generic[T]):
+    isolated: bool = False
+    """
+    If True, the lane will not return its values for the next lane.
+    """
+    process_mode: ProcessModeType = "one"
     """
     Controls how input values are processed.
     
@@ -170,7 +173,7 @@ class Lane(Generic[T], ABC):
         return (self.primary_lane or self).__terminated
 
     @classmethod
-    def get_lanes(cls):
+    def get_lanes(cls, self: Optional["Lane"] = None):
         """Retrieves all lanes associated with this lane class and its parent classes.
 
         This method collects all lanes from the current class's `lanes` dictionary and
@@ -191,7 +194,7 @@ class Lane(Generic[T], ABC):
             get_before_lanes: Method that filters to only lanes with negative priority.
             get_after_lanes: Method that filters to only lanes with non-negative priority.
         """
-        lanes = {**cls.lanes}
+        lanes = {**cls.lanes} if self is None else {**self.lanes}
 
         for base in cls.__mro__[1:]:
             if issubclass(base, Lane):
@@ -200,7 +203,7 @@ class Lane(Generic[T], ABC):
         return lanes
 
     @classmethod
-    def get_before_lanes(cls):
+    def get_before_lanes(cls, self: Optional["Lane"] = None):
         """Retrieves all lanes that should execute before the current lane.
 
         Lanes are ordered based on their priority number, with lower (more negative)
@@ -221,7 +224,7 @@ class Lane(Generic[T], ABC):
         for _, lane in sorted(
             filter(
                 lambda v: v[0] < 0,
-                cls.get_lanes().items(),
+                cls.get_lanes(self).items(),
             ),
             key=lambda v: v[0],
         ):
@@ -231,7 +234,7 @@ class Lane(Generic[T], ABC):
                 yield lane
 
     @classmethod
-    def get_after_lanes(cls):
+    def get_after_lanes(cls, self: Optional["Lane"] = None):
         """Retrieves all lanes that should execute after the current lane.
 
         Lanes are ordered based on their priority number, with higher (more positive)
@@ -252,7 +255,7 @@ class Lane(Generic[T], ABC):
         for _, lane in sorted(
             filter(
                 lambda v: v[0] >= 0,
-                cls.get_lanes().items(),
+                cls.get_lanes(self).items(),
             ),
             key=lambda v: v[0],
         ):
@@ -757,6 +760,16 @@ class Lane(Generic[T], ABC):
 
             yield descendant()
 
+    @classmethod
+    def from_mock(cls, mock: Mock):
+        lane = cls()
+        lane.lanes = mock.lanes
+        lane.isolated = mock.isolated
+        lane.process_mode = mock.process_mode
+        lane.multiprocessing = mock.multiprocessing
+
+        return lane
+
     def process(self, value: T) -> Any:
         """Processes a value through this lane's core logic.
 
@@ -925,60 +938,10 @@ class Lane(Generic[T], ABC):
         else:
             return result
 
-    def __from_lane_direction(
-        self,
-        value,
-        direction: "LaneDirection",
-        processes: Optional[int],
-    ):
-        if isinstance(direction, Fork):
-            original_value = value
-            new_value = value
-
-            if isgenerator(value):
-                deconstructed_value = [*value]
-                original_value = (v for v in deconstructed_value)
-                new_value = (v for v in deconstructed_value)
-
-            for _, lane in sorted(
-                direction.lanes.items(),
-                key=lambda v: v[0],
-            ):
-                if self.terminated:
-                    break
-
-                lane = from_lane_reference(lane)
-
-                if lane is None:
-                    continue
-
-                if isinstance(lane, LaneDirection):
-                    new_value = self.__from_lane_direction(
-                        value=new_value,
-                        direction=lane,
-                        processes=processes,
-                    )
-                    continue
-
-                new_value = lane().run(
-                    value=new_value,
-                    processes=processes,
-                )
-
-            if direction.isolated:
-                if isgenerator(new_value):
-                    deque(new_value, maxlen=0)
-
-                return original_value
-
-            return new_value
-
-        return value
-
     def __process_sub_lanes(
         self,
         value,
-        sub_lanes: Iterable[Union["LaneDirection", Type["Lane"]]],
+        sub_lanes: Iterable[Union["Mock", Type["Lane"]]],
         processes: Optional[int],
     ):
         new_value = value
@@ -987,18 +950,32 @@ class Lane(Generic[T], ABC):
             if self.terminated:
                 break
 
-            if isinstance(sub_lane, LaneDirection):
-                new_value = self.__from_lane_direction(
-                    value=new_value,
-                    direction=sub_lane,
-                    processes=processes,
-                )
+            instance = (
+                Lane.from_mock(sub_lane)
+                if isinstance(sub_lane, Mock)
+                else sub_lane(self.primary_lane)
+            )
+            original_value = new_value
 
-            else:
-                new_value = sub_lane().run(
-                    value=new_value,
-                    processes=processes,
-                )
+            if instance.isolated:
+                deconstructed_value = [*new_value]
+                original_value = (value for value in deconstructed_value)
+                new_value = (value for value in deconstructed_value)
+
+            result = instance.run(
+                value=new_value,
+                processes=processes,
+            )
+
+            if instance.isolated:
+                new_value = original_value
+
+                if isgenerator(result):
+                    deque(result, maxlen=0)
+
+                continue
+
+            new_value = result
 
         return new_value
 
@@ -1049,7 +1026,7 @@ class Lane(Generic[T], ABC):
 
         value = self.__process_sub_lanes(
             value=value,
-            sub_lanes=self.get_before_lanes(),
+            sub_lanes=self.get_before_lanes(self),
             processes=processes,
         )
 
@@ -1066,7 +1043,7 @@ class Lane(Generic[T], ABC):
 
         return self.__process_sub_lanes(
             value=value,
-            sub_lanes=self.get_after_lanes(),
+            sub_lanes=self.get_after_lanes(self),
             processes=processes,
         )
 
