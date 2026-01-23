@@ -849,6 +849,9 @@ class Lane(Generic[T]):
                 else:
                     yield result
 
+                if self.terminated:
+                    return
+
         else:
             for result in self.__process_batch(
                 value,
@@ -861,6 +864,9 @@ class Lane(Generic[T]):
 
                 else:
                     yield result
+
+                if self.terminated:
+                    return
 
     def __process(
         self,
