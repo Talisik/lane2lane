@@ -111,7 +111,10 @@ class Lane(Generic[T]):
 
         self.init()
 
-    def terminate(self):
+    def terminate(
+        self,
+        recursive: bool = False,
+    ):
         """Terminates the current lane execution.
 
         Sets the terminated flag to True, which will stop the execution flow of the current lane
@@ -125,6 +128,12 @@ class Lane(Generic[T]):
             terminate_on_error: Class method that determines termination behavior on errors.
         """
         self.__terminated = True
+
+        if recursive:
+            primary_lane = self.primary_lane
+
+            if primary_lane is not None:
+                primary_lane.terminate()
 
         logger.debug(
             "N-{0} {1} terminated.",
@@ -833,6 +842,9 @@ class Lane(Generic[T]):
             data: Any = [*value]
             result = self.process(data)
 
+            if self.terminated:
+                return
+
             if isgenerator(result):
                 yield from result
 
@@ -842,6 +854,9 @@ class Lane(Generic[T]):
         elif self.process_mode == "one":
             for subvalue in value:
                 result = self.process(subvalue)
+
+                if self.terminated:
+                    return
 
                 if isgenerator(result):
                     yield from result
@@ -858,6 +873,9 @@ class Lane(Generic[T]):
                 self.process_mode,
             ):
                 result = self.process(result)
+
+                if self.terminated:
+                    return
 
                 if isgenerator(result):
                     yield from result
@@ -959,7 +977,7 @@ class Lane(Generic[T]):
             instance = (
                 Lane.from_mock(sub_lane)
                 if isinstance(sub_lane, Mock)
-                else sub_lane(self.primary_lane)
+                else sub_lane(self.primary_lane or self)
             )
             original_value = new_value
 
@@ -1111,21 +1129,6 @@ class Lane(Generic[T]):
             Lane.__print_load_order(
                 lanes,
             )
-
-        if processes is None:
-            for lane in lanes:
-                result = lane.run(
-                    value=None,
-                    processes=processes,
-                )
-
-                if isgenerator(result):
-                    yield from result
-                    continue
-
-                yield result
-
-            return
 
         for lane in lanes:
             result = lane.run(
