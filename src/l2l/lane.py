@@ -22,6 +22,8 @@ from fun_things import categorizer, get_all_descendant_classes, load_modules
 from loguru import logger
 from simple_chalk import chalk
 
+from l2l.terminate_kind import TerminateKind
+
 from .errors import LaneNotFoundError
 from .mock import Mock
 from .types import LaneDictType, ProcessModeType
@@ -100,7 +102,7 @@ class Lane(Generic[T]):
         self.__primary_lane = primary_lane
         self.__errors: List[Exception] = []
         self.__errors_stacktrace: List[str] = []
-        self.__terminated = False
+        self.__terminated: TerminateKind = TerminateKind.NO
         self.__start_time = perf_counter()
 
         logger.debug(
@@ -113,7 +115,7 @@ class Lane(Generic[T]):
 
     def terminate(
         self,
-        recursive: bool = False,
+        kind: TerminateKind = TerminateKind.SELF,
     ):
         """Terminates the current lane execution.
 
@@ -127,9 +129,12 @@ class Lane(Generic[T]):
             terminated: Property that checks if the lane has been terminated.
             terminate_on_error: Class method that determines termination behavior on errors.
         """
-        self.__terminated = True
+        self.__terminated = kind
 
-        if recursive:
+        if kind in [
+            TerminateKind.NEIGHBOR,
+            TerminateKind.ALL,
+        ]:
             primary_lane = self.primary_lane
 
             if primary_lane is not None:
@@ -842,7 +847,7 @@ class Lane(Generic[T]):
             data: Any = [*value]
             result = self.process(data)
 
-            if self.terminated:
+            if self.terminated != TerminateKind.NO:
                 return
 
             if isgenerator(result):
@@ -855,7 +860,7 @@ class Lane(Generic[T]):
             for subvalue in value:
                 result = self.process(subvalue)
 
-                if self.terminated:
+                if self.terminated != TerminateKind.NO:
                     return
 
                 if isgenerator(result):
@@ -864,7 +869,7 @@ class Lane(Generic[T]):
                 else:
                     yield result
 
-                if self.terminated:
+                if self.terminated != TerminateKind.NO:
                     return
 
         else:
@@ -874,7 +879,7 @@ class Lane(Generic[T]):
             ):
                 result = self.process(result)
 
-                if self.terminated:
+                if self.terminated != TerminateKind.NO:
                     return
 
                 if isgenerator(result):
@@ -883,7 +888,7 @@ class Lane(Generic[T]):
                 else:
                     yield result
 
-                if self.terminated:
+                if self.terminated != TerminateKind.NO:
                     return
 
     def __process(
@@ -971,7 +976,7 @@ class Lane(Generic[T]):
         new_value = value
 
         for sub_lane in sub_lanes:
-            if self.terminated:
+            if self.terminated != TerminateKind.NO:
                 break
 
             instance = (
@@ -1054,7 +1059,7 @@ class Lane(Generic[T]):
             processes=processes,
         )
 
-        if self.terminated:
+        if self.terminated != TerminateKind.NO:
             return value
 
         value = self.__process(
@@ -1062,7 +1067,7 @@ class Lane(Generic[T]):
             processes=processes,
         )
 
-        if self.terminated:
+        if self.terminated != TerminateKind.NO:
             return value
 
         return self.__process_sub_lanes(
@@ -1138,9 +1143,16 @@ class Lane(Generic[T]):
 
             if isgenerator(result):
                 yield from result
+
+                if lane.terminated == TerminateKind.ALL:
+                    break
+
                 continue
 
             yield result
+
+            if lane.terminated == TerminateKind.ALL:
+                break
 
     @staticmethod
     @final
