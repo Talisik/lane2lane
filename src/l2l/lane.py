@@ -41,6 +41,19 @@ class Lane(_LaneCore):
         """
         return value
 
+    def __timed_process(self, value):
+        """Calls ``process`` while accumulating its own compute time.
+
+        Note: if ``process`` returns a generator, only its creation is timed
+        (the work runs lazily as the result is iterated downstream).
+        """
+        start = perf_counter()
+
+        try:
+            return self.process(value)
+        finally:
+            self._work_seconds += perf_counter() - start
+
     def __process_batch(
         self,
         value,
@@ -68,7 +81,7 @@ class Lane(_LaneCore):
     def __process_generator(self, value):
         if self.process_mode == "all":
             data: Any = [*value]
-            result = self.process(data)
+            result = self.__timed_process(data)
 
             if self.terminated != TerminateKind.NO:
                 return
@@ -81,7 +94,7 @@ class Lane(_LaneCore):
 
         elif self.process_mode == "one":
             for subvalue in value:
-                result = self.process(subvalue)
+                result = self.__timed_process(subvalue)
 
                 if self.terminated != TerminateKind.NO:
                     return
@@ -100,7 +113,7 @@ class Lane(_LaneCore):
                 value,
                 self.process_mode,
             ):
-                result = self.process(result)
+                result = self.__timed_process(result)
 
                 if self.terminated != TerminateKind.NO:
                     return
@@ -152,7 +165,7 @@ class Lane(_LaneCore):
                                 yield result
 
             else:
-                result = self.process(value)
+                result = self.__timed_process(value)
 
                 if isgenerator(result):
                     yield from result
@@ -183,6 +196,7 @@ class Lane(_LaneCore):
             run_id=id(self),
             name=self.first_name(),
             duration=self.duration,
+            work=self._work_seconds,
             terminated=self.terminated != TerminateKind.NO,
         )
 

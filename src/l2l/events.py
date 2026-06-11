@@ -15,7 +15,10 @@ as lanes run::
 Event kinds and payload keys:
 
 - ``lane_started``    — ``run_id``, ``name``, ``parent_id``
-- ``lane_done``       — ``run_id``, ``name``, ``duration``, ``terminated``
+- ``lane_done``       — ``run_id``, ``name``, ``duration``, ``work``, ``terminated``
+  (``duration`` is wall-clock since start — which bunches up at pipeline drain
+  for lazy/streaming lanes; ``work`` is the cumulative time spent inside this
+  lane's own ``process()`` calls, i.e. its truthful compute time.)
 - ``lane_terminated`` — ``run_id``, ``name``, ``terminate_kind``
 
 ``run_id`` is the lane instance's identity; ``parent_id`` is the primary lane's

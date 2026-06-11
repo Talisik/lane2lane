@@ -96,6 +96,10 @@ class _LaneCore:
         self._errors_stacktrace: List[str] = []
         self._terminated: TerminateKind = TerminateKind.NO
         self._start_time = perf_counter()
+        #: Cumulative time spent inside this lane's own process() calls.
+        #: Truthful "work" time, excluding waiting for downstream lanes to pull
+        #: (the wall-clock duration would otherwise bunch up at pipeline drain).
+        self._work_seconds = 0.0
 
         logger.debug(
             "N-{0} {1} initialized.",

@@ -71,12 +71,19 @@ class AsyncLane(_LaneCore):
         an ``async def`` with ``yield`` (returns an async generator). The former
         must be awaited; the latter must not.
         """
-        result = self.process(value)
+        start = perf_counter()
 
-        if isawaitable(result):
-            return await result
+        try:
+            result = self.process(value)
 
-        return result
+            if isawaitable(result):
+                result = await result
+
+            return result
+        finally:
+            # If process is an async-generator, only its creation is timed
+            # here (the work runs lazily as it is iterated downstream).
+            self._work_seconds += perf_counter() - start
 
     async def __yield_result(self, result):
         if isasyncgen(result):
@@ -208,6 +215,7 @@ class AsyncLane(_LaneCore):
             run_id=id(self),
             name=self.first_name(),
             duration=self.duration,
+            work=self._work_seconds,
             terminated=self.terminated != TerminateKind.NO,
         )
 
