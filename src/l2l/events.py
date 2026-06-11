@@ -41,6 +41,11 @@ class _Events:
     def __init__(self):
         self._subscribers: List[EventCallback] = []
 
+    @property
+    def has_subscribers(self) -> bool:
+        """True if anyone is observing — lets hot paths skip instrumentation."""
+        return bool(self._subscribers)
+
     def subscribe(self, callback: EventCallback) -> EventCallback:
         """Registers a callback. Returns it (handy as a decorator)."""
         if callback not in self._subscribers:

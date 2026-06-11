@@ -51,11 +51,17 @@ class Lane(_LaneCore):
         the result is iterated downstream).
         """
         self._log_started()
+
+        # Fast path for `moo run` (no UI/observers): skip per-item timing and
+        # activity events entirely.
+        if not (events.has_subscribers or logger._enabled_for("DEBUG")):
+            return self.process(value)
+
         events.emit(
             "lane_active",
             run_id=id(self),
             name=self.first_name(),
-            parent_id=id(self.primary_lane) if self.primary_lane else None,
+            parent_id=id(self._tree_parent) if self._tree_parent else None,
         )
         start = perf_counter()
 
@@ -240,6 +246,7 @@ class Lane(_LaneCore):
                 if isinstance(sub_lane, Mock)
                 else sub_lane(self.primary_lane or self)
             )
+            instance._tree_parent = self  # immediate parent (for visualization)
             original_value = new_value
 
             if instance.isolated:

@@ -104,6 +104,10 @@ class _LaneCore:
         #: at construction (the next run index) and confirmed in run(); avoids
         #: the lazily-logged class counter showing the wrong N at drain time.
         self._run_index = self.__class__._run_count + 1
+        #: Immediate parent lane (the lane that ran this as a sub-lane), used for
+        #: hierarchical visualization. Distinct from primary_lane (the top of the
+        #: chain, used for error/termination aggregation). None for a top lane.
+        self._tree_parent: Optional["_LaneCore"] = None
         #: Whether the "started" line has been logged this run (logged at the
         #: first process() call, i.e. real execution order, not lazy gen entry).
         self._started_logged = False
@@ -137,7 +141,7 @@ class _LaneCore:
             "lane_started",
             run_id=id(self),
             name=self.first_name(),
-            parent_id=id(self.primary_lane) if self.primary_lane else None,
+            parent_id=id(self._tree_parent) if self._tree_parent else None,
         )
 
     @final
