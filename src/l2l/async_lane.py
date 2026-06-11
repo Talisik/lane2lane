@@ -71,7 +71,12 @@ class AsyncLane(_LaneCore):
         an ``async def`` with ``yield`` (returns an async generator). The former
         must be awaited; the latter must not.
         """
-        events.emit("lane_active", run_id=id(self), name=self.first_name())
+        events.emit(
+            "lane_active",
+            run_id=id(self),
+            name=self.first_name(),
+            parent_id=id(self.primary_lane) if self.primary_lane else None,
+        )
         start = perf_counter()
 
         try:

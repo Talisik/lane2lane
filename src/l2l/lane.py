@@ -50,7 +50,12 @@ class Lane(_LaneCore):
         generator, only its creation is timed/active (the work runs lazily as
         the result is iterated downstream).
         """
-        events.emit("lane_active", run_id=id(self), name=self.first_name())
+        events.emit(
+            "lane_active",
+            run_id=id(self),
+            name=self.first_name(),
+            parent_id=id(self.primary_lane) if self.primary_lane else None,
+        )
         start = perf_counter()
 
         try:
