@@ -104,6 +104,9 @@ class _LaneCore:
         #: at construction (the next run index) and confirmed in run(); avoids
         #: the lazily-logged class counter showing the wrong N at drain time.
         self._run_index = self.__class__._run_count + 1
+        #: Whether the "started" line has been logged this run (logged at the
+        #: first process() call, i.e. real execution order, not lazy gen entry).
+        self._started_logged = False
 
         logger.debug(
             "N-{0} {1} initialized.",
@@ -112,6 +115,30 @@ class _LaneCore:
         )
 
         self.init()
+
+    def _log_started(self):
+        """Logs/emits the 'started' line once, at the first process() call.
+
+        Done here (not at generator entry) so it reflects real execution order
+        rather than the lazy, reversed generator-entry order.
+        """
+        if self._started_logged:
+            return
+
+        self._started_logged = True
+
+        logger.debug(
+            "N-{0} {1} started.",
+            self._run_index,
+            self.first_name(),
+        )
+
+        events.emit(
+            "lane_started",
+            run_id=id(self),
+            name=self.first_name(),
+            parent_id=id(self.primary_lane) if self.primary_lane else None,
+        )
 
     @final
     def terminate(

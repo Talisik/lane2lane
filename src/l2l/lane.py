@@ -50,6 +50,7 @@ class Lane(_LaneCore):
         generator, only its creation is timed/active (the work runs lazily as
         the result is iterated downstream).
         """
+        self._log_started()
         events.emit(
             "lane_active",
             run_id=id(self),
@@ -148,19 +149,7 @@ class Lane(_LaneCore):
         processes: Optional[int],
     ):
         self._start_time = perf_counter()
-
-        logger.debug(
-            "N-{0} {1} started.",
-            self._run_index,
-            self.first_name(),
-        )
-
-        events.emit(
-            "lane_started",
-            run_id=id(self),
-            name=self.first_name(),
-            parent_id=id(self.primary_lane) if self.primary_lane else None,
-        )
+        self._started_logged = False  # "started" logs at the first process() call
 
         try:
             if isgenerator(value):
