@@ -7,12 +7,13 @@ from typing import (
 )
 
 if TYPE_CHECKING:
-    from .lane import Lane
+    from ._lane_core import _LaneCore
     from .mock import Mock
 
 ProcessModeType = Union[Literal["all", "one"], int]
 LaneReferenceType = Union[
-    Type["Lane"],
+    # the shared base so both Lane and AsyncLane subclasses are accepted
+    Type["_LaneCore"],
     str,
     "LaneDictType",
     "Mock",
