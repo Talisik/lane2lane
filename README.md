@@ -160,6 +160,136 @@ class DataSourceLane(Lane):
             yield item
 ```
 
+## Async Lanes
+
+`AsyncLane` is the asynchronous counterpart of `Lane`. Everything works the
+same — `lanes`, priorities, `primary()`, `start()` — but `process`/`run`/`start`
+are coroutines and you `await` inside them.
+
+```python
+import asyncio
+from l2l import AsyncLane
+
+
+class FetchLane(AsyncLane):
+    async def process(self, value):
+        data = await fetch(value)
+        yield data
+
+
+class Main(AsyncLane):
+    lanes = {1: FetchLane}
+
+    @classmethod
+    def primary(cls) -> bool:
+        return True
+
+    async def process(self, value):
+        await asyncio.sleep(0)
+        yield "start"
+
+
+# start() is an async generator — iterate it with `async for`
+async def main():
+    async for result in AsyncLane.start("MAIN"):
+        print(result)
+
+asyncio.run(main())
+```
+
+Notes:
+
+-   `process` may be an `async def` returning a value / sync generator / async
+    generator, **or** an `async def` with `yield` (an async generator).
+-   Inputs may be plain values, sync generators, or async generators.
+-   `AsyncLane` keeps its **own registry**, separate from `Lane`, so sync and
+    async lanes never mix inside one chain. Reference async lanes from async
+    `lanes` dicts only.
+-   Items are processed sequentially with `await` (no implicit concurrency).
+
+## Observing Execution (Events)
+
+`l2l.events` is a UI-agnostic hub that emits lane lifecycle events — useful for
+dashboards, progress bars, or metrics. Subscribers never affect lane execution
+(their exceptions are swallowed), and when there are **no** subscribers the
+emit is a cheap no-op.
+
+```python
+from l2l import events
+
+@events.subscribe
+def on_event(kind, payload):
+    if kind == "lane_active":
+        print("running:", payload["name"])
+```
+
+Event kinds and payloads:
+
+| kind              | payload                                              |
+| ----------------- | ---------------------------------------------------- |
+| `lane_started`    | `run_id`, `name`, `parent_id` (first `process` call) |
+| `lane_active`     | `run_id`, `name`, `parent_id` (a `process` call)     |
+| `lane_idle`       | `run_id`, `name`, `work`                             |
+| `lane_done`       | `run_id`, `name`, `duration`, `work`, `terminated`   |
+| `lane_terminated` | `run_id`, `name`, `terminate_kind`                   |
+
+-   `run_id` identifies a lane instance; `parent_id` is its immediate parent's
+    `run_id` (or `None`), so you can nest sub-lanes under their parent.
+-   `duration` is wall-clock since start (bunches up at pipeline drain for lazy
+    chains); `work` is the truthful cumulative time spent inside the lane's own
+    `process()` calls.
+
+## Logging
+
+`l2l.logger` is a tiny, dependency-free logger (no loguru). Toggle and level it,
+or attach a sink to consume records (e.g. a TUI log pane).
+
+```python
+from l2l import logger
+
+logger.disable()              # silence
+logger.enable()
+logger.set_level("INFO")      # DEBUG / INFO / WARNING / ERROR
+logger.set_stream(sys.stdout) # default: stderr
+
+# stream records elsewhere (level/message)
+logger.add_sink(lambda level, message: my_pane.append(level, message))
+```
+
+Lane lifecycle (`initialized`/`started`/`done`) logs at `DEBUG`; the `[DEBUG]`
+tag is omitted in console output, other levels are tagged.
+
+## Terminal Styling
+
+`l2l.style` is a small chainable ANSI styler (no simple-chalk):
+
+```python
+from l2l import style
+
+print(style.green.bold("ok"))
+print(style.dim.gray("muted"))
+style.disable()   # emit plain text (e.g. non-terminal output)
+```
+
+## Inline Lanes (Mock)
+
+Instead of defining a class, drop a `dict` (or `Mock`) straight into a `lanes`
+map to declare an inline, anonymous sub-pipeline. Use `Mock` when you need to
+set `isolated` / `process_mode` on that inline group:
+
+```python
+from l2l import Lane, Mock
+
+class Main(Lane):
+    lanes = {
+        1: {0: StepA, 1: StepB},          # plain dict → inline group (defaults)
+        2: Mock(isolated=True, lanes={     # Mock → inline group with config
+            0: SideEffectA,
+            1: SideEffectB,
+        }),
+    }
+```
+
 ## Advanced Features
 
 ### Conditional Execution

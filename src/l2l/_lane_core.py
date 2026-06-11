@@ -186,16 +186,19 @@ class _LaneCore:
     @property
     @final
     def start_time(self):
+        """`perf_counter()` timestamp when this lane's processing last started."""
         return self._start_time
 
     @property
     @final
     def duration(self):
+        """Wall-clock seconds since processing started (live until done)."""
         return perf_counter() - self._start_time
 
     @classmethod
     @final
     def terminate_on_error(cls):
+        """Whether an unhandled error in `process()` terminates the lane (True)."""
         return True
 
     @classmethod
@@ -207,26 +210,31 @@ class _LaneCore:
     @staticmethod
     @final
     def global_errors():
+        """Yields every exception captured across all lanes since the last run."""
         yield from _LaneCore._global_errors
 
     @staticmethod
     @final
     def global_errors_str():
+        """Yields the string form of each globally captured exception."""
         return (str(error) for error in _LaneCore._global_errors)
 
     @staticmethod
     @final
     def global_errors_stacktrace():
+        """Yields the formatted traceback of each globally captured exception."""
         yield from _LaneCore._global_errors_stacktrace
 
     @staticmethod
     @final
     def global_errors_count():
+        """Number of exceptions captured across all lanes since the last run."""
         return len(_LaneCore._global_errors)
 
     @property
     @final
     def terminated(self):
+        """The chain's `TerminateKind` (reads the primary lane's flag)."""
         return (self.primary_lane or self)._terminated
 
     @classmethod
@@ -323,21 +331,25 @@ class _LaneCore:
     @property
     @final
     def errors_count(self):
+        """Number of exceptions captured in this lane's chain."""
         return len((self.primary_lane or self)._errors)
 
     @property
     @final
     def errors(self):
+        """Yields each exception captured in this lane's chain."""
         yield from (self.primary_lane or self)._errors
 
     @property
     @final
     def errors_str(self):
+        """Yields the string form of each exception in this lane's chain."""
         return (str(error) for error in (self.primary_lane or self)._errors)
 
     @property
     @final
     def errors_stacktrace(self):
+        """Yields the formatted traceback of each exception in this lane's chain."""
         yield from (self.primary_lane or self)._errors_stacktrace
 
     @final
@@ -486,6 +498,7 @@ class _LaneCore:
 
     @classmethod
     def from_mock(cls, mock: Mock):
+        """Builds a lane instance from a `Mock` (inline, anonymous sub-pipeline)."""
         lane = cls()
         lane.lanes = mock.lanes
         lane.isolated = mock.isolated

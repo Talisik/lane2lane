@@ -8,6 +8,8 @@ if TYPE_CHECKING:
 
 
 def get_lane(value: Union[Type["Lane"], str, None]):
+    """Resolves a lane reference to a class: ``None``→``None``, ``str``→looked-up
+    `Lane`, a class→itself."""
     if value is None:
         return None
 
@@ -18,6 +20,8 @@ def get_lane(value: Union[Type["Lane"], str, None]):
 
 
 def from_lane_reference(lane: LaneReferenceType):
+    """Normalizes a `lanes`-dict value to a runnable: ``dict``→`Mock`, `Mock`→
+    itself, else resolved via `get_lane`."""
     if isinstance(lane, dict):
         return Mock(
             lanes=lane,

@@ -98,15 +98,19 @@ class Logger:
         self._emit(level, message)
 
     def debug(self, message: str, *args, **kwargs):
+        """Logs at DEBUG. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
         self._log("DEBUG", message, *args, **kwargs)
 
     def info(self, message: str, *args, **kwargs):
+        """Logs at INFO. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
         self._log("INFO", message, *args, **kwargs)
 
     def warning(self, message: str, *args, **kwargs):
+        """Logs at WARNING. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
         self._log("WARNING", message, *args, **kwargs)
 
     def error(self, message: str, *args, **kwargs):
+        """Logs at ERROR. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
         self._log("ERROR", message, *args, **kwargs)
 
     def exception(self, error: BaseException, *args, **kwargs):

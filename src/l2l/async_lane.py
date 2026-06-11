@@ -235,6 +235,8 @@ class AsyncLane(_LaneCore):
         lane: Union[str, Type["AsyncLane"]],
         value: Any,
     ):
+        """Runs another async lane (by class or name) with ``value`` and yields
+        its results. Raises ``LaneNotFoundError`` if it can't be resolved."""
         cls = self._get_lane_ref(lane)
 
         if not cls:

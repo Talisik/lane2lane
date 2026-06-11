@@ -216,6 +216,8 @@ class Lane(_LaneCore):
         lane: Union[str, Type["Lane"]],
         value: Any,
     ):
+        """Runs another lane (by class or name) with ``value`` and yields/returns
+        its result. Raises ``LaneNotFoundError`` if the lane can't be resolved."""
         cls = self._get_lane_ref(lane)
 
         if not cls:
