@@ -182,7 +182,7 @@ class AsyncLane(_LaneCore):
 
         logger.debug(
             "N-{0} {1} started.",
-            self.__class__._run_count,
+            self._run_index,
             self.first_name(),
         )
 
@@ -217,9 +217,9 @@ class AsyncLane(_LaneCore):
 
         logger.debug(
             "N-{0} {1} done in {2:.2f}s.",
-            self.__class__._run_count,
+            self._run_index,
             self.first_name(),
-            self.duration,
+            self._work_seconds,
         )
 
         events.emit(
@@ -305,6 +305,7 @@ class AsyncLane(_LaneCore):
         or an async generator that yields the processed values.
         """
         self.__class__._run_count += 1
+        self._run_index = self.__class__._run_count
 
         value = await self.__process_sub_lanes(
             value=value,

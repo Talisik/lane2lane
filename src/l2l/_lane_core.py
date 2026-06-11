@@ -100,10 +100,14 @@ class _LaneCore:
         #: Truthful "work" time, excluding waiting for downstream lanes to pull
         #: (the wall-clock duration would otherwise bunch up at pipeline drain).
         self._work_seconds = 0.0
+        #: Stable run number for THIS instance, used in all N-x logs. Predicted
+        #: at construction (the next run index) and confirmed in run(); avoids
+        #: the lazily-logged class counter showing the wrong N at drain time.
+        self._run_index = self.__class__._run_count + 1
 
         logger.debug(
             "N-{0} {1} initialized.",
-            self.__class__._run_count,
+            self._run_index,
             self.first_name(),
         )
 
@@ -144,7 +148,7 @@ class _LaneCore:
 
         logger.debug(
             "N-{0} {1} terminated.",
-            self.__class__._run_count,
+            self._run_index,
             self.first_name(),
         )
 

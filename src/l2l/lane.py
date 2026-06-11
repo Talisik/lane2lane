@@ -151,7 +151,7 @@ class Lane(_LaneCore):
 
         logger.debug(
             "N-{0} {1} started.",
-            self.__class__._run_count,
+            self._run_index,
             self.first_name(),
         )
 
@@ -201,9 +201,9 @@ class Lane(_LaneCore):
 
         logger.debug(
             "N-{0} {1} done in {2:.2f}s.",
-            self.__class__._run_count,
+            self._run_index,
             self.first_name(),
-            self.duration,
+            self._work_seconds,
         )
 
         events.emit(
@@ -288,6 +288,7 @@ class Lane(_LaneCore):
         final value, which may be a generator if processing yields.
         """
         self.__class__._run_count += 1
+        self._run_index = self.__class__._run_count
 
         value = self.__process_sub_lanes(
             value=value,

@@ -75,7 +75,9 @@ class Logger:
         return self.enabled and _LEVELS[level] >= _LEVELS[self.level]
 
     def _emit(self, level: str, message: str):
-        print(f"[{level}] {message}", file=self._stream)
+        # DEBUG is the common lifecycle log — keep it unlabeled; tag the rest.
+        prefix = "" if level == "DEBUG" else f"[{level}] "
+        print(f"{prefix}{message}", file=self._stream)
 
         for sink in list(self._sinks):
             try:

@@ -18,12 +18,11 @@ pip install git+https://github.com/Talisik/lane2lane.git
 
 -   Python 3.8+
 -   fun-things
--   simple-chalk
 
 ## Quick Start
 
 ```python
-from l2l import Lane, PrimaryLane
+from l2l import Lane
 
 # Define a simple processing lane
 class ProcessingLane(Lane):
@@ -31,11 +30,15 @@ class ProcessingLane(Lane):
         processed_value = f"{value} - processed"
         yield processed_value
 
-# Define a primary lane that uses the processing lane
-class Main(PrimaryLane):
+# Define a primary lane (entry point) that uses the processing lane
+class Main(Lane):
     lanes = {
         -10: ProcessingLane,  # Run ProcessingLane before this lane
     }
+
+    @classmethod
+    def primary(cls) -> bool:
+        return True  # Entry point — runnable via Lane.start("MAIN")
 
     def process(self, value):
         result = f"{value} - main"
@@ -81,19 +84,8 @@ class MyLane(Lane):
 
 ### Creating a Primary Lane
 
-Primary lanes are entry points for execution:
-
-```python
-from l2l import PrimaryLane
-
-class MyPrimaryLane(PrimaryLane):
-    def process(self, value):
-        # Process the input value
-        result = transform_data(value)
-        yield result
-```
-
-You can also override the 'primary' class method in a Lane class:
+Primary lanes are entry points for execution. Override the `primary` class
+method to make a lane runnable via `Lane.start(...)`:
 
 ```python
 from l2l import Lane
@@ -114,7 +106,11 @@ class MyPrimaryLane(Lane):
 Lanes can specify other lanes to run before and after them:
 
 ```python
-class MainLane(PrimaryLane):
+class MainLane(Lane):
+    @classmethod
+    def primary(cls) -> bool:
+        return True
+
     # Define lanes to run before and after this lane
     lanes = {
         -10: "PreprocessLane",   # Run PreprocessLane before this lane (higher negative priority runs first)
@@ -145,22 +141,24 @@ result = Lane.start("MAIN_LANE")
 results = [*Lane.start("MAIN")]
 ```
 
-## Subscriber Example
+## Data Source Example
 
-Subscriber is a pre-defined lane class that provides a standard way to generate data. Rather than processing input from previous lanes, Subscriber lanes generate their own payloads:
+A lane can generate its own data instead of processing input from previous
+lanes — just `yield` the payloads from `process()`:
 
 ```python
-from l2l import Subscriber
+from l2l import Lane
 
-class DataSourceLane(Subscriber):
-    def get_payloads(self, value):
-        # Fetch data from some source
-        data = fetch_data_from_source()
-        for item in data:
+class DataSourceLane(Lane):
+    @classmethod
+    def primary(cls) -> bool:
+        return True
+
+    def process(self, value):
+        # Fetch data from some source and emit each item downstream
+        for item in fetch_data_from_source():
             yield item
 ```
-
-Instead of implementing `process()`, you only need to implement `get_payloads()` to define where your data comes from. The Subscriber class handles the rest automatically.
 
 ## Advanced Features
 
@@ -268,11 +266,11 @@ class ErrorHandlingLane(Lane):
 Here's a complete example showing a data processing pipeline:
 
 ```python
-from l2l import Lane, PrimaryLane, Subscriber
+from l2l import Lane
 
 # Data source that fetches records
-class DataSourceLane(Subscriber):
-    def get_payloads(self, value):
+class DataSourceLane(Lane):
+    def process(self, value):
         data = [
             {"id": 1, "name": "Alice", "score": 85},
             {"id": 2, "name": "Bob", "score": 92},
@@ -309,7 +307,11 @@ class FormattingLane(Lane):
         yield f"Student {value['name']} (ID: {value['id']}) - Score: {value['score']}, Grade: {value.get('grade', 'N/A')}"
 
 # Main primary lane that orchestrates the pipeline
-class StudentProcessingLane(PrimaryLane):
+class StudentProcessingLane(Lane):
+    @classmethod
+    def primary(cls) -> bool:
+        return True
+
     lanes = {
         -30: DataSourceLane,       # First fetch the data
         -20: ValidationLane,       # Then validate it
