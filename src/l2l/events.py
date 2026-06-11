@@ -14,11 +14,17 @@ as lanes run::
 
 Event kinds and payload keys:
 
-- ``lane_started``    — ``run_id``, ``name``, ``parent_id``
+- ``lane_started``    — ``run_id``, ``name``, ``parent_id`` (generator entered)
+- ``lane_active``     — ``run_id``, ``name`` (a ``process()`` call is starting)
+- ``lane_idle``       — ``run_id``, ``name``, ``work`` (that call returned)
 - ``lane_done``       — ``run_id``, ``name``, ``duration``, ``work``, ``terminated``
-  (``duration`` is wall-clock since start — which bunches up at pipeline drain
-  for lazy/streaming lanes; ``work`` is the cumulative time spent inside this
-  lane's own ``process()`` calls, i.e. its truthful compute time.)
+  (generator drained)
+
+``lane_started``/``lane_done`` track the lazily-chained generator lifecycle, so
+they bunch up (all start ≈ together, all finish at pipeline drain).
+``lane_active``/``lane_idle`` wrap the actual ``process()`` calls, which run
+sequentially — use these to show which lane is computing *now*. ``duration`` is
+wall-clock since start; ``work`` is cumulative ``process()`` time (truthful).
 - ``lane_terminated`` — ``run_id``, ``name``, ``terminate_kind``
 
 ``run_id`` is the lane instance's identity; ``parent_id`` is the primary lane's

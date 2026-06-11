@@ -44,15 +44,25 @@ class Lane(_LaneCore):
     def __timed_process(self, value):
         """Calls ``process`` while accumulating its own compute time.
 
-        Note: if ``process`` returns a generator, only its creation is timed
-        (the work runs lazily as the result is iterated downstream).
+        Emits ``lane_active``/``lane_idle`` around the actual call so observers
+        can show which lane is computing *now* (these calls run sequentially,
+        unlike the lazily-chained generators). Note: if ``process`` returns a
+        generator, only its creation is timed/active (the work runs lazily as
+        the result is iterated downstream).
         """
+        events.emit("lane_active", run_id=id(self), name=self.first_name())
         start = perf_counter()
 
         try:
             return self.process(value)
         finally:
             self._work_seconds += perf_counter() - start
+            events.emit(
+                "lane_idle",
+                run_id=id(self),
+                name=self.first_name(),
+                work=self._work_seconds,
+            )
 
     def __process_batch(
         self,
