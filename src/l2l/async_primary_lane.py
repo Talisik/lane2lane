@@ -1,9 +1,9 @@
 from abc import ABC
 
-from .lane import Lane
+from .async_lane import AsyncLane
 
 
-class PrimaryLane(Lane, ABC):
+class AsyncPrimaryLane(AsyncLane, ABC):
     @classmethod
     def primary(cls) -> bool:
         return True

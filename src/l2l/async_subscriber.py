@@ -3,16 +3,16 @@ from typing import Iterable
 
 from .logger import logger
 
-from .lane import Lane
+from .async_lane import AsyncLane
 
 
-class Subscriber(Lane, ABC):
+class AsyncSubscriber(AsyncLane, ABC):
     @abstractmethod
-    def get_payloads(self, value) -> Iterable:
+    async def get_payloads(self, value) -> Iterable:
         pass
 
-    def process(self, value):
-        payloads = list(self.get_payloads(value))
+    async def process(self, value):
+        payloads = list(await self.get_payloads(value))
 
         if not payloads:
             self.terminate()
@@ -23,4 +23,5 @@ class Subscriber(Lane, ABC):
                 len(payloads),
             )
 
-        yield from payloads
+        for payload in payloads:
+            yield payload

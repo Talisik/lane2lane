@@ -1,11 +1,11 @@
 import traceback
-from collections import deque
-from inspect import isgenerator
-from multiprocessing.pool import ThreadPool
+from inspect import isasyncgen, isawaitable, isgenerator
 from time import perf_counter
 from typing import (
     Any,
-    Generator,
+    AsyncGenerator,
+    AsyncIterator,
+    Awaitable,
     Iterable,
     Optional,
     Type,
@@ -21,35 +21,84 @@ from .mock import Mock
 from .terminate_kind import TerminateKind
 
 
-class Lane(_LaneCore):
-    """Synchronous processing lane.
+async def _aiter(value):
+    """Iterates a value that may be either a sync or an async iterable."""
+    if isasyncgen(value):
+        async for item in value:
+            yield item
 
-    Override :meth:`process` to implement per-value logic, then run a lane (or a
-    chain of before/after lanes) with :meth:`run` / :meth:`start`. Shared
-    machinery (naming, discovery, termination, errors, printing) lives in
-    :class:`l2l._lane_core._LaneCore`.
+    else:
+        for item in value:
+            yield item
 
-    See :class:`l2l.AsyncLane` for the asynchronous counterpart.
+
+class AsyncLane(_LaneCore):
+    """Asynchronous processing lane.
+
+    Mirrors :class:`l2l.Lane` but runs ``process``/``run``/``start`` as
+    coroutines, awaiting each value sequentially. Keeps its own lane registry
+    (rooted at ``AsyncLane``) so async and sync lanes never mix inside a single
+    chain. Shared machinery lives in :class:`l2l._lane_core._LaneCore`.
+
+    Inputs may be plain values, sync generators, or async generators. The
+    ``process`` method may be an ``async def`` (returning a value, a sync
+    generator, or an async generator) or an ``async def`` with ``yield``.
     """
 
-    def process(self, value) -> Any:
+    def process(
+        self,
+        value,
+    ) -> Union[Awaitable[Any], AsyncIterator[Any]]:
         """Processes a value through this lane's core logic.
 
-        Override this method to implement specific processing. The default
-        returns the input unchanged. May return a value or a generator (whose
-        yielded values are collected by :meth:`run`).
+        Override with either an ``async def`` (returning a plain value, a sync
+        generator, or an async generator) or an ``async def`` with ``yield``
+        (an async generator). The default awaitable returns the input unchanged.
+
+        Declared as a plain method returning ``Awaitable | AsyncIterator`` so
+        both override shapes are type-compatible; the runtime dispatches on the
+        actual kind in :meth:`__invoke_process`.
         """
+        return self.__default_process(value)
+
+    async def __default_process(self, value):
         return value
 
-    def __process_batch(
+    async def __invoke_process(self, value):
+        """Calls ``process`` whether it is a coroutine or async-generator.
+
+        ``process`` may be defined as ``async def`` (returns a coroutine) or as
+        an ``async def`` with ``yield`` (returns an async generator). The former
+        must be awaited; the latter must not.
+        """
+        result = self.process(value)
+
+        if isawaitable(result):
+            return await result
+
+        return result
+
+    async def __yield_result(self, result):
+        if isasyncgen(result):
+            async for item in result:
+                yield item
+
+        elif isgenerator(result):
+            for item in result:
+                yield item
+
+        else:
+            yield result
+
+    async def __process_batch(
         self,
         value,
         max_count: int,
-    ) -> Generator[Any, None, None]:
+    ) -> AsyncGenerator[Any, None]:
         count = 0
         result = []
 
-        for subvalue in value:
+        async for subvalue in _aiter(value):
             result.append(subvalue)
 
             count += 1
@@ -65,56 +114,47 @@ class Lane(_LaneCore):
         if result:
             yield result
 
-    def __process_generator(self, value):
+    async def __process_generator(self, value):
         if self.process_mode == "all":
-            data: Any = [*value]
-            result = self.process(data)
+            data: Any = [item async for item in _aiter(value)]
+            result = await self.__invoke_process(data)
 
             if self.terminated != TerminateKind.NO:
                 return
 
-            if isgenerator(result):
-                yield from result
-
-            else:
-                yield result
+            async for item in self.__yield_result(result):
+                yield item
 
         elif self.process_mode == "one":
-            for subvalue in value:
-                result = self.process(subvalue)
+            async for subvalue in _aiter(value):
+                result = await self.__invoke_process(subvalue)
 
                 if self.terminated != TerminateKind.NO:
                     return
 
-                if isgenerator(result):
-                    yield from result
-
-                else:
-                    yield result
+                async for item in self.__yield_result(result):
+                    yield item
 
                 if self.terminated != TerminateKind.NO:
                     return
 
         else:
-            for result in self.__process_batch(
+            async for batch in self.__process_batch(
                 value,
                 self.process_mode,
             ):
-                result = self.process(result)
+                result = await self.__invoke_process(batch)
 
                 if self.terminated != TerminateKind.NO:
                     return
 
-                if isgenerator(result):
-                    yield from result
-
-                else:
-                    yield result
+                async for item in self.__yield_result(result):
+                    yield item
 
                 if self.terminated != TerminateKind.NO:
                     return
 
-    def __process(
+    async def __process(
         self,
         value,
         processes: Optional[int],
@@ -135,30 +175,15 @@ class Lane(_LaneCore):
         )
 
         try:
-            if isgenerator(value):
-                if processes is None or not self.multiprocessing:
-                    yield from self.__process_generator(value)
-
-                else:
-                    with ThreadPool(processes=processes) as pool:
-                        for result in pool.map(
-                            self.__process_generator,
-                            value,
-                        ):
-                            if isgenerator(result):
-                                yield from result
-
-                            else:
-                                yield result
+            if isgenerator(value) or isasyncgen(value):
+                async for item in self.__process_generator(value):
+                    yield item
 
             else:
-                result = self.process(value)
+                result = await self.__invoke_process(value)
 
-                if isgenerator(result):
-                    yield from result
-
-                else:
-                    yield result
+                async for item in self.__yield_result(result):
+                    yield item
 
         except Exception as e:
             self._add_error(
@@ -187,9 +212,9 @@ class Lane(_LaneCore):
         )
 
     @final
-    def goto(
+    async def goto(
         self,
-        lane: Union[str, Type["Lane"]],
+        lane: Union[str, Type["AsyncLane"]],
         value: Any,
     ):
         cls = self._get_lane_ref(lane)
@@ -197,18 +222,19 @@ class Lane(_LaneCore):
         if not cls:
             raise LaneNotFoundError(lane)
 
-        result = cls().run(value)
+        result = await cls().run(value)
 
-        if isgenerator(result):
-            yield from result
+        if isasyncgen(result):
+            async for item in result:
+                yield item
 
         else:
-            return result
+            yield result
 
-    def __process_sub_lanes(
+    async def __process_sub_lanes(
         self,
         value,
-        sub_lanes: Iterable[Union["Mock", Type["Lane"]]],
+        sub_lanes: Iterable[Union["Mock", Type["AsyncLane"]]],
         processes: Optional[int],
     ):
         new_value = value
@@ -218,18 +244,18 @@ class Lane(_LaneCore):
                 break
 
             instance = (
-                Lane.from_mock(sub_lane)
+                AsyncLane.from_mock(sub_lane)
                 if isinstance(sub_lane, Mock)
                 else sub_lane(self.primary_lane or self)
             )
             original_value = new_value
 
             if instance.isolated:
-                deconstructed_value = [*new_value]
+                deconstructed_value = [item async for item in _aiter(new_value)]
                 original_value = (value for value in deconstructed_value)
                 new_value = (value for value in deconstructed_value)
 
-            result = instance.run(
+            result = await instance.run(
                 value=new_value,
                 processes=processes,
             )
@@ -237,8 +263,9 @@ class Lane(_LaneCore):
             if instance.isolated:
                 new_value = original_value
 
-                if isgenerator(result):
-                    deque(result, maxlen=0)
+                if isasyncgen(result):
+                    async for _ in result:
+                        pass
 
                 continue
 
@@ -247,20 +274,19 @@ class Lane(_LaneCore):
         return new_value
 
     @final
-    def run(
+    async def run(
         self,
         value: Any = None,
         processes: Optional[int] = None,
     ):
         """Executes this lane with the given input value.
 
-        Runs all 'before' lanes, this lane's :meth:`process`, then all 'after'
-        lanes, in priority order, stopping early if terminated. Returns the
-        final value, which may be a generator if processing yields.
+        Async counterpart of :meth:`l2l.Lane.run`. Returns either a plain value
+        or an async generator that yields the processed values.
         """
         self.__class__._run_count += 1
 
-        value = self.__process_sub_lanes(
+        value = await self.__process_sub_lanes(
             value=value,
             sub_lanes=self.get_before_lanes(self),
             processes=processes,
@@ -277,7 +303,7 @@ class Lane(_LaneCore):
         if self.terminated != TerminateKind.NO:
             return value
 
-        return self.__process_sub_lanes(
+        return await self.__process_sub_lanes(
             value=value,
             sub_lanes=self.get_after_lanes(self),
             processes=processes,
@@ -285,17 +311,17 @@ class Lane(_LaneCore):
 
     @classmethod
     @final
-    def start(
+    async def start(
         cls,
         name: str,
         print_lanes=True,
         print_indent=2,
         processes: Optional[int] = None,
     ):
-        """Starts all primary lanes matching ``name`` and yields their results.
+        """Starts all primary async lanes matching ``name`` and yields results.
 
-        Clears global errors, finds matching primary lanes, optionally prints
-        the available lanes and load order, then runs each and yields results.
+        Async counterpart of :meth:`l2l.Lane.start`. This is an async generator;
+        iterate it with ``async for`` (or drain it inside ``asyncio.run``).
         """
         cls._reset_global_errors()
 
@@ -319,13 +345,14 @@ class Lane(_LaneCore):
             )
 
         for lane in lanes:
-            result = lane.run(
+            result = await lane.run(
                 value=None,
                 processes=processes,
             )
 
-            if isgenerator(result):
-                yield from result
+            if isasyncgen(result):
+                async for item in result:
+                    yield item
 
                 if lane.terminated == TerminateKind.ALL:
                     break
@@ -338,4 +365,4 @@ class Lane(_LaneCore):
                 break
 
 
-Lane._registry = Lane
+AsyncLane._registry = AsyncLane
