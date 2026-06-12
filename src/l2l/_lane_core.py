@@ -1,3 +1,4 @@
+import asyncio
 import re
 from abc import ABC
 from time import perf_counter
@@ -14,7 +15,7 @@ from typing import (
 from fun_things import categorizer, get_all_descendant_classes, load_modules
 
 from ._style import style
-from .events import events
+from .events import _AsyncGate, _SyncGate, events
 from .logger import logger
 from .mock import Mock
 from .terminate_kind import TerminateKind
@@ -100,6 +101,9 @@ class _LaneCore:
         #: Truthful "work" time, excluding waiting for downstream lanes to pull
         #: (the wall-clock duration would otherwise bunch up at pipeline drain).
         self._work_seconds = 0.0
+        #: Seconds spent parked at a breakpoint, subtracted from work time so a
+        #: manual pause never inflates the truthful compute total.
+        self._paused_seconds = 0.0
         #: Stable run number for THIS instance, used in all N-x logs. Predicted
         #: at construction (the next run index) and confirmed in run(); avoids
         #: the lazily-logged class counter showing the wrong N at drain time.
@@ -142,6 +146,83 @@ class _LaneCore:
             run_id=id(self),
             name=self.first_name(),
             parent_id=id(self._tree_parent) if self._tree_parent else None,
+        )
+
+    @final
+    def breakpoint(self, label: Optional[str] = None):
+        """Pauses this lane until a dev tool resumes it. **Dev-only, no-op otherwise.**
+
+        Call inside :meth:`process` to halt the pipeline at this point, like
+        ``pdb.set_trace()`` but driven by the dev UI rather than a debugger
+        prompt. Blocks the calling thread until
+        :meth:`l2l.events.resume`/``resume_all`` is invoked for this lane.
+
+        Does nothing (and costs nothing) unless breakpoints have been armed via
+        ``events.enable_breakpoints()`` — so it is inert in ``moo run``. Use
+        :meth:`abreakpoint` from an :class:`l2l.AsyncLane`.
+
+        Args:
+            label: Optional note surfaced to the dev tool (e.g. a phase name).
+        """
+        if not events.breakpoints_enabled:
+            return
+
+        gate = _SyncGate()
+        self._begin_breakpoint(gate, label)
+        start = perf_counter()
+        gate.wait()
+        self._end_breakpoint(start)
+
+    @final
+    async def abreakpoint(self, label: Optional[str] = None):
+        """Async counterpart of :meth:`breakpoint` (awaits instead of blocking).
+
+        Call as ``await self.abreakpoint()`` inside an async ``process``. Same
+        dev-only semantics; releasable from another thread (the dev tool's).
+        """
+        if not events.breakpoints_enabled:
+            return
+
+        gate = _AsyncGate(asyncio.get_running_loop())
+        self._begin_breakpoint(gate, label)
+        start = perf_counter()
+        await gate.wait()
+        self._end_breakpoint(start)
+
+    def _begin_breakpoint(self, gate, label: Optional[str]):
+        run_id = id(self)
+        events._register_gate(run_id, gate)
+
+        logger.debug(
+            "N-{0} {1} paused at breakpoint.",
+            self._run_index,
+            self.first_name(),
+        )
+
+        events.emit(
+            "lane_breakpoint",
+            run_id=run_id,
+            name=self.first_name(),
+            parent_id=id(self._tree_parent) if self._tree_parent else None,
+            label=label,
+        )
+
+    def _end_breakpoint(self, start: float):
+        run_id = id(self)
+        # Don't count the manual pause as compute time.
+        self._paused_seconds += perf_counter() - start
+        events._clear_gate(run_id)
+
+        logger.debug(
+            "N-{0} {1} resumed.",
+            self._run_index,
+            self.first_name(),
+        )
+
+        events.emit(
+            "lane_resumed",
+            run_id=run_id,
+            name=self.first_name(),
         )
 
     @final

@@ -232,12 +232,47 @@ Event kinds and payloads:
 | `lane_idle`       | `run_id`, `name`, `work`                             |
 | `lane_done`       | `run_id`, `name`, `duration`, `work`, `terminated`   |
 | `lane_terminated` | `run_id`, `name`, `terminate_kind`                   |
+| `lane_breakpoint` | `run_id`, `name`, `parent_id`, `label`               |
+| `lane_resumed`    | `run_id`, `name`                                     |
 
 -   `run_id` identifies a lane instance; `parent_id` is its immediate parent's
     `run_id` (or `None`), so you can nest sub-lanes under their parent.
 -   `duration` is wall-clock since start (bunches up at pipeline drain for lazy
     chains); `work` is the truthful cumulative time spent inside the lane's own
     `process()` calls.
+
+## Breakpoints
+
+A dev-only pause, like `pdb.set_trace()` but driven by an observer instead of a
+prompt. Call `self.breakpoint()` inside `process()` to halt the pipeline at that
+point until something resumes it:
+
+```python
+class Enrich(Lane):
+    def process(self, value):
+        data = fetch(value)
+        self.breakpoint("after fetch")   # pauses here…
+        return transform(data)
+```
+
+Breakpoints are **disarmed by default** — `breakpoint()` does nothing (and costs
+nothing) unless a tool arms them. So they are inert in production runs and only
+pause under a dev tool (e.g. Carabao's `moo dev` UI, which arms them and binds a
+"continue" key):
+
+```python
+from l2l import events
+
+events.enable_breakpoints()       # arm (a dev tool does this)
+# … observe lane_breakpoint events, then release the paused lane:
+events.resume(run_id)             # one lane
+events.resume_all()               # every paused lane
+events.disable_breakpoints()      # disarm + release everything
+```
+
+Use `await self.abreakpoint()` from an `AsyncLane` (it awaits instead of
+blocking, and is releasable from another thread). Time spent parked at a
+breakpoint is excluded from the lane's `work` total.
 
 ## Logging
 

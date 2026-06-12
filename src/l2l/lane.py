@@ -64,11 +64,15 @@ class Lane(_LaneCore):
             parent_id=id(self._tree_parent) if self._tree_parent else None,
         )
         start = perf_counter()
+        paused_before = self._paused_seconds
 
         try:
             return self.process(value)
         finally:
-            self._work_seconds += perf_counter() - start
+            # Subtract any breakpoint pause so work time stays truthful.
+            self._work_seconds += (perf_counter() - start) - (
+                self._paused_seconds - paused_before
+            )
             events.emit(
                 "lane_idle",
                 run_id=id(self),

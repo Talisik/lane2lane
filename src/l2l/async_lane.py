@@ -88,6 +88,7 @@ class AsyncLane(_LaneCore):
             parent_id=id(self._tree_parent) if self._tree_parent else None,
         )
         start = perf_counter()
+        paused_before = self._paused_seconds
 
         try:
             result = self.process(value)
@@ -99,7 +100,10 @@ class AsyncLane(_LaneCore):
         finally:
             # If process is an async-generator, only its creation is timed
             # here (the work runs lazily as it is iterated downstream).
-            self._work_seconds += perf_counter() - start
+            # Subtract any breakpoint pause so work time stays truthful.
+            self._work_seconds += (perf_counter() - start) - (
+                self._paused_seconds - paused_before
+            )
             events.emit(
                 "lane_idle",
                 run_id=id(self),
