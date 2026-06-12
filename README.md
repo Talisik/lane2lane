@@ -284,15 +284,16 @@ from l2l import logger
 
 logger.disable()              # silence
 logger.enable()
-logger.set_level("INFO")      # DEBUG / INFO / WARNING / ERROR
+logger.set_level("INFO")      # TRACE / DEBUG / INFO / WARNING / ERROR
 logger.set_stream(sys.stdout) # default: stderr
 
 # stream records elsewhere (level/message)
 logger.add_sink(lambda level, message: my_pane.append(level, message))
 ```
 
-Lane lifecycle (`initialized`/`started`/`done`) logs at `DEBUG`; the `[DEBUG]`
-tag is omitted in console output, other levels are tagged.
+Lane lifecycle (`initialized`/`started`/`done`/`paused`/`resumed`) logs at
+`TRACE`; the `TRACE`/`DEBUG` tags are omitted in console output, other levels
+are tagged.
 
 ## Terminal Styling
 

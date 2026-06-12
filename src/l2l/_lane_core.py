@@ -116,7 +116,7 @@ class _LaneCore:
         #: first process() call, i.e. real execution order, not lazy gen entry).
         self._started_logged = False
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} initialized.",
             self._run_index,
             self.first_name(),
@@ -135,7 +135,7 @@ class _LaneCore:
 
         self._started_logged = True
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} started.",
             self._run_index,
             self.first_name(),
@@ -193,7 +193,7 @@ class _LaneCore:
         run_id = id(self)
         events._register_gate(run_id, gate)
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} paused at breakpoint.",
             self._run_index,
             self.first_name(),
@@ -213,7 +213,7 @@ class _LaneCore:
         self._paused_seconds += perf_counter() - start
         events._clear_gate(run_id)
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} resumed.",
             self._run_index,
             self.first_name(),
@@ -258,7 +258,7 @@ class _LaneCore:
             if primary_lane is not None:
                 primary_lane.terminate()
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} terminated.",
             self._run_index,
             self.first_name(),

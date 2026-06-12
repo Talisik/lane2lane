@@ -16,7 +16,9 @@ Event kinds and payload keys:
 
 - ``lane_started``    — ``run_id``, ``name``, ``parent_id`` (generator entered)
 - ``lane_active``     — ``run_id``, ``name``, ``parent_id`` (a ``process()`` call is starting)
-- ``lane_idle``       — ``run_id``, ``name``, ``work`` (that call returned)
+- ``lane_idle``       — ``run_id``, ``name``, ``work``, ``value`` (that call
+  returned; ``value`` is the lane's output, a generator passed as-is — observers
+  must not iterate it)
 - ``lane_done``       — ``run_id``, ``name``, ``duration``, ``work``, ``terminated``
   (generator drained)
 

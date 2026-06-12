@@ -75,7 +75,7 @@ class AsyncLane(_LaneCore):
 
         # Fast path for `moo run` (no UI/observers): skip per-item timing and
         # activity events entirely.
-        if not (events.has_subscribers or logger._enabled_for("DEBUG")):
+        if not (events.has_subscribers or logger._enabled_for("TRACE")):
             result = self.process(value)
             if isawaitable(result):
                 result = await result
@@ -89,6 +89,7 @@ class AsyncLane(_LaneCore):
         )
         start = perf_counter()
         paused_before = self._paused_seconds
+        result = None
 
         try:
             result = self.process(value)
@@ -104,11 +105,14 @@ class AsyncLane(_LaneCore):
             self._work_seconds += (perf_counter() - start) - (
                 self._paused_seconds - paused_before
             )
+            # `value` is the lane's output; generators/async-gens are passed
+            # as-is and never iterated by observers.
             events.emit(
                 "lane_idle",
                 run_id=id(self),
                 name=self.first_name(),
                 work=self._work_seconds,
+                value=result,
             )
 
     async def __yield_result(self, result):
@@ -217,7 +221,7 @@ class AsyncLane(_LaneCore):
             if self.terminate_on_error():
                 self.terminate()
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} done in {2:.2f}s.",
             self._run_index,
             self.first_name(),

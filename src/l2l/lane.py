@@ -54,7 +54,7 @@ class Lane(_LaneCore):
 
         # Fast path for `moo run` (no UI/observers): skip per-item timing and
         # activity events entirely.
-        if not (events.has_subscribers or logger._enabled_for("DEBUG")):
+        if not (events.has_subscribers or logger._enabled_for("TRACE")):
             return self.process(value)
 
         events.emit(
@@ -65,19 +65,24 @@ class Lane(_LaneCore):
         )
         start = perf_counter()
         paused_before = self._paused_seconds
+        result = None
 
         try:
-            return self.process(value)
+            result = self.process(value)
+            return result
         finally:
             # Subtract any breakpoint pause so work time stays truthful.
             self._work_seconds += (perf_counter() - start) - (
                 self._paused_seconds - paused_before
             )
+            # `value` is the lane's output (the value handed downstream). A
+            # generator is passed as-is and never iterated by observers.
             events.emit(
                 "lane_idle",
                 run_id=id(self),
                 name=self.first_name(),
                 work=self._work_seconds,
+                value=result,
             )
 
     def __process_batch(
@@ -198,7 +203,7 @@ class Lane(_LaneCore):
             if self.terminate_on_error():
                 self.terminate()
 
-        logger.debug(
+        logger.trace(
             "N-{0} {1} done in {2:.2f}s.",
             self._run_index,
             self.first_name(),

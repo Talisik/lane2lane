@@ -3,6 +3,7 @@ import traceback as _traceback
 from typing import Callable, Dict, List
 
 _LEVELS: Dict[str, int] = {
+    "TRACE": 5,
     "DEBUG": 10,
     "INFO": 20,
     "WARNING": 30,
@@ -43,7 +44,7 @@ class Logger:
         self.enabled = False
 
     def set_level(self, level: str):
-        """Sets the minimum level to emit (``DEBUG``/``INFO``/``WARNING``/``ERROR``)."""
+        """Sets the minimum level to emit (``TRACE``/``DEBUG``/``INFO``/``WARNING``/``ERROR``)."""
         level = level.upper()
 
         if level not in _LEVELS:
@@ -75,8 +76,8 @@ class Logger:
         return self.enabled and _LEVELS[level] >= _LEVELS[self.level]
 
     def _emit(self, level: str, message: str):
-        # DEBUG is the common lifecycle log — keep it unlabeled; tag the rest.
-        prefix = "" if level == "DEBUG" else f"[{level}] "
+        # TRACE/DEBUG are the common lifecycle logs — keep them unlabeled; tag the rest.
+        prefix = "" if level in ("TRACE", "DEBUG") else f"[{level}] "
         print(f"{prefix}{message}", file=self._stream)
 
         for sink in list(self._sinks):
@@ -96,6 +97,10 @@ class Logger:
                 pass
 
         self._emit(level, message)
+
+    def trace(self, message: str, *args, **kwargs):
+        """Logs at TRACE. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
+        self._log("TRACE", message, *args, **kwargs)
 
     def debug(self, message: str, *args, **kwargs):
         """Logs at DEBUG. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
