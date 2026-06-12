@@ -6,6 +6,9 @@ _LEVELS: Dict[str, int] = {
     "TRACE": 5,
     "DEBUG": 10,
     "INFO": 20,
+    # Breakpoint pauses — between INFO and WARNING so they stand out and aren't
+    # filtered with the noisy TRACE lifecycle logs.
+    "PAUSE": 25,
     "WARNING": 30,
     "ERROR": 40,
 }
@@ -44,7 +47,7 @@ class Logger:
         self.enabled = False
 
     def set_level(self, level: str):
-        """Sets the minimum level to emit (``TRACE``/``DEBUG``/``INFO``/``WARNING``/``ERROR``)."""
+        """Sets the minimum level to emit (``TRACE``/``DEBUG``/``INFO``/``PAUSE``/``WARNING``/``ERROR``)."""
         level = level.upper()
 
         if level not in _LEVELS:
@@ -105,6 +108,10 @@ class Logger:
     def debug(self, message: str, *args, **kwargs):
         """Logs at DEBUG. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
         self._log("DEBUG", message, *args, **kwargs)
+
+    def pause(self, message: str, *args, **kwargs):
+        """Logs at PAUSE — used for breakpoint pauses, easy to spot."""
+        self._log("PAUSE", message, *args, **kwargs)
 
     def info(self, message: str, *args, **kwargs):
         """Logs at INFO. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""

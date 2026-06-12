@@ -272,7 +272,8 @@ events.disable_breakpoints()      # disarm + release everything
 
 Use `await self.abreakpoint()` from an `AsyncLane` (it awaits instead of
 blocking, and is releasable from another thread). Time spent parked at a
-breakpoint is excluded from the lane's `work` total.
+breakpoint is excluded from the lane's `work` total. Pauses log at the dedicated
+`PAUSE` level (between `INFO` and `WARNING`) so they're easy to spot.
 
 ## Logging
 
