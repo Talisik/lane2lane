@@ -126,12 +126,20 @@ class Logger:
         self._log("ERROR", message, *args, **kwargs)
 
     def exception(self, error: BaseException, *args, **kwargs):
-        """Logs an exception at ERROR level with its traceback."""
+        """Logs an exception at ERROR level with its traceback.
+
+        The traceback is appended to the message so it reaches sinks (e.g. a TUI
+        log pane), not just the stream.
+        """
         if not self._enabled_for("ERROR"):
             return
 
-        self._log("ERROR", str(error), *args, **kwargs)
-        _traceback.print_exc(file=self._stream)
+        message = str(error)
+        tb = _traceback.format_exc()
+        if tb and tb.strip() != "NoneType: None":
+            message = f"{message}\n{tb.rstrip()}"
+
+        self._log("ERROR", message, *args, **kwargs)
 
 
 #: Shared logger instance used across lane2lane.
