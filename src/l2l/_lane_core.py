@@ -193,10 +193,12 @@ class _LaneCore:
         run_id = id(self)
         events._register_gate(run_id, gate)
 
+        suffix = f": {label}" if label else ""
         logger.trace(
-            "N-{0} {1} paused at breakpoint.",
+            "N-{0} {1} paused at breakpoint{2}.",
             self._run_index,
             self.first_name(),
+            suffix,
         )
 
         events.emit(
