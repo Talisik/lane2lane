@@ -10,10 +10,6 @@ For detailed documentation, check out our [Wiki](https://github.com/Talisik/lane
 pip install lane2lane
 ```
 
-```bash
-pip install git+https://github.com/Talisik/lane2lane.git
-```
-
 ## Requirements
 
 -   Python 3.8+
