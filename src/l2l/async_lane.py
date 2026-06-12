@@ -112,14 +112,15 @@ class AsyncLane(_LaneCore):
                 self._paused_seconds - paused_before
             )
 
-            # `value` is the lane's output; generators/async-gens are passed
-            # as-is and never iterated by observers.
+            # Emit the *input* to process() (a concrete item/batch) rather than
+            # the output, which is often an async-generator that must not be
+            # iterated.
             events.emit(
                 "lane_idle",
                 run_id=id(self),
                 name=self.first_name(),
                 work=self._work_seconds,
-                value=result,
+                value=value,
             )
 
     async def __yield_result(self, result):
