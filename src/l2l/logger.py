@@ -40,14 +40,17 @@ class Logger:
 
     def enable(self):
         """Turns logging on."""
+
         self.enabled = True
 
     def disable(self):
         """Turns logging off."""
+
         self.enabled = False
 
     def set_level(self, level: str):
         """Sets the minimum level to emit (``TRACE``/``DEBUG``/``INFO``/``PAUSE``/``WARNING``/``ERROR``)."""
+
         level = level.upper()
 
         if level not in _LEVELS:
@@ -57,6 +60,7 @@ class Logger:
 
     def set_stream(self, stream):
         """Redirects output to the given file-like stream."""
+
         self._stream = stream
 
     def add_sink(self, sink: Sink) -> Sink:
@@ -65,6 +69,7 @@ class Logger:
         Sinks fire regardless of ``_stream`` and let tools (e.g. a TUI log
         pane) consume records. Level gating still applies. Returns the sink.
         """
+
         if sink not in self._sinks:
             self._sinks.append(sink)
 
@@ -72,6 +77,7 @@ class Logger:
 
     def remove_sink(self, sink: Sink):
         """Removes a previously registered sink."""
+
         if sink in self._sinks:
             self._sinks.remove(sink)
 
@@ -81,6 +87,7 @@ class Logger:
     def _emit(self, level: str, message: str):
         # TRACE/DEBUG are the common lifecycle logs — keep them unlabeled; tag the rest.
         prefix = "" if level in ("TRACE", "DEBUG") else f"[{level}] "
+
         print(f"{prefix}{message}", file=self._stream)
 
         for sink in list(self._sinks):
@@ -103,26 +110,32 @@ class Logger:
 
     def trace(self, message: str, *args, **kwargs):
         """Logs at TRACE. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
+
         self._log("TRACE", message, *args, **kwargs)
 
     def debug(self, message: str, *args, **kwargs):
         """Logs at DEBUG. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
+
         self._log("DEBUG", message, *args, **kwargs)
 
     def pause(self, message: str, *args, **kwargs):
         """Logs at PAUSE — used for breakpoint pauses, easy to spot."""
+
         self._log("PAUSE", message, *args, **kwargs)
 
     def info(self, message: str, *args, **kwargs):
         """Logs at INFO. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
+
         self._log("INFO", message, *args, **kwargs)
 
     def warning(self, message: str, *args, **kwargs):
         """Logs at WARNING. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
+
         self._log("WARNING", message, *args, **kwargs)
 
     def error(self, message: str, *args, **kwargs):
         """Logs at ERROR. ``message`` is ``str.format``-ed with ``*args``/``**kwargs``."""
+
         self._log("ERROR", message, *args, **kwargs)
 
     def exception(self, error: BaseException, *args, **kwargs):
@@ -131,11 +144,13 @@ class Logger:
         The traceback is appended to the message so it reaches sinks (e.g. a TUI
         log pane), not just the stream.
         """
+
         if not self._enabled_for("ERROR"):
             return
 
         message = str(error)
         tb = _traceback.format_exc()
+
         if tb and tb.strip() != "NoneType: None":
             message = f"{message}\n{tb.rstrip()}"
 

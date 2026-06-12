@@ -39,6 +39,7 @@ class Lane(_LaneCore):
         returns the input unchanged. May return a value or a generator (whose
         yielded values are collected by :meth:`run`).
         """
+
         return value
 
     def __timed_process(self, value):
@@ -50,6 +51,7 @@ class Lane(_LaneCore):
         generator, only its creation is timed/active (the work runs lazily as
         the result is iterated downstream).
         """
+
         self._log_started()
 
         # Fast path for `moo run` (no UI/observers): skip per-item timing and
@@ -63,18 +65,21 @@ class Lane(_LaneCore):
             name=self.first_name(),
             parent_id=id(self._tree_parent) if self._tree_parent else None,
         )
+
         start = perf_counter()
         paused_before = self._paused_seconds
         result = None
 
         try:
             result = self.process(value)
+
             return result
         finally:
             # Subtract any breakpoint pause so work time stays truthful.
             self._work_seconds += (perf_counter() - start) - (
                 self._paused_seconds - paused_before
             )
+
             # `value` is the lane's output (the value handed downstream). A
             # generator is passed as-is and never iterated by observers.
             events.emit(
@@ -227,6 +232,7 @@ class Lane(_LaneCore):
     ):
         """Runs another lane (by class or name) with ``value`` and yields/returns
         its result. Raises ``LaneNotFoundError`` if the lane can't be resolved."""
+
         cls = self._get_lane_ref(lane)
 
         if not cls:
@@ -294,6 +300,7 @@ class Lane(_LaneCore):
         lanes, in priority order, stopping early if terminated. Returns the
         final value, which may be a generator if processing yields.
         """
+
         self.__class__._run_count += 1
         self._run_index = self.__class__._run_count
 
@@ -334,6 +341,7 @@ class Lane(_LaneCore):
         Clears global errors, finds matching primary lanes, optionally prints
         the available lanes and load order, then runs each and yields results.
         """
+
         cls._reset_global_errors()
 
         lanes = [*cls.get_primary_lanes(name)]

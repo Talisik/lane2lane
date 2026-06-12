@@ -23,6 +23,7 @@ from .terminate_kind import TerminateKind
 
 async def _aiter(value):
     """Iterates a value that may be either a sync or an async iterable."""
+
     if isasyncgen(value):
         async for item in value:
             yield item
@@ -59,6 +60,7 @@ class AsyncLane(_LaneCore):
         both override shapes are type-compatible; the runtime dispatches on the
         actual kind in :meth:`__invoke_process`.
         """
+
         return self.__default_process(value)
 
     async def __default_process(self, value):
@@ -71,14 +73,17 @@ class AsyncLane(_LaneCore):
         an ``async def`` with ``yield`` (returns an async generator). The former
         must be awaited; the latter must not.
         """
+
         self._log_started()
 
         # Fast path for `moo run` (no UI/observers): skip per-item timing and
         # activity events entirely.
         if not (events.has_subscribers or logger._enabled_for("TRACE")):
             result = self.process(value)
+
             if isawaitable(result):
                 result = await result
+
             return result
 
         events.emit(
@@ -87,6 +92,7 @@ class AsyncLane(_LaneCore):
             name=self.first_name(),
             parent_id=id(self._tree_parent) if self._tree_parent else None,
         )
+
         start = perf_counter()
         paused_before = self._paused_seconds
         result = None
@@ -105,6 +111,7 @@ class AsyncLane(_LaneCore):
             self._work_seconds += (perf_counter() - start) - (
                 self._paused_seconds - paused_before
             )
+
             # `value` is the lane's output; generators/async-gens are passed
             # as-is and never iterated by observers.
             events.emit(
@@ -245,6 +252,7 @@ class AsyncLane(_LaneCore):
     ):
         """Runs another async lane (by class or name) with ``value`` and yields
         its results. Raises ``LaneNotFoundError`` if it can't be resolved."""
+
         cls = self._get_lane_ref(lane)
 
         if not cls:
@@ -313,6 +321,7 @@ class AsyncLane(_LaneCore):
         Async counterpart of :meth:`l2l.Lane.run`. Returns either a plain value
         or an async generator that yields the processed values.
         """
+
         self.__class__._run_count += 1
         self._run_index = self.__class__._run_count
 
@@ -353,6 +362,7 @@ class AsyncLane(_LaneCore):
         Async counterpart of :meth:`l2l.Lane.start`. This is an async generator;
         iterate it with ``async for`` (or drain it inside ``asyncio.run``).
         """
+
         cls._reset_global_errors()
 
         lanes = [*cls.get_primary_lanes(name)]

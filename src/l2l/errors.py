@@ -10,4 +10,5 @@ class LaneNotFoundError(Exception):
 
     def __init__(self, lane_name):
         self.lane_name = lane_name
+
         super().__init__(f"Lane '{lane_name}' not found!")

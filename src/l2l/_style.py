@@ -37,10 +37,12 @@ class _Style:
 
     def enable(self):
         """Turns coloring on (affects all chained styles)."""
+
         _Style.enabled = True
 
     def disable(self):
         """Turns coloring off; calls return plain text."""
+
         _Style.enabled = False
 
     def __getattr__(self, name):

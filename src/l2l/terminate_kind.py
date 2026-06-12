@@ -8,16 +8,23 @@ class TerminateKind(Enum):
     """
 
     NO = "no"
+
     """Not terminated (the default state)."""
+
     SELF = "self"
+
     """
     This lane and its dependencies are terminated.
     """
+
     NEIGHBOR = "neighbor"
+
     """
     The neighbor lanes are terminated.
     """
+
     ALL = "all"
+
     """
     All lanes are terminated.
     """

@@ -98,10 +98,12 @@ class _Events:
     @property
     def has_subscribers(self) -> bool:
         """True if anyone is observing — lets hot paths skip instrumentation."""
+
         return bool(self._subscribers)
 
     def subscribe(self, callback: EventCallback) -> EventCallback:
         """Registers a callback. Returns it (handy as a decorator)."""
+
         if callback not in self._subscribers:
             self._subscribers.append(callback)
 
@@ -109,11 +111,13 @@ class _Events:
 
     def unsubscribe(self, callback: EventCallback):
         """Removes a previously registered callback."""
+
         if callback in self._subscribers:
             self._subscribers.remove(callback)
 
     def clear(self):
         """Removes all callbacks."""
+
         self._subscribers.clear()
 
     def emit(self, kind: str, **payload):
@@ -122,6 +126,7 @@ class _Events:
         Subscriber exceptions are swallowed so observers can never break lane
         execution.
         """
+
         if not self._subscribers:
             return
 
@@ -136,33 +141,42 @@ class _Events:
     @property
     def breakpoints_enabled(self) -> bool:
         """Whether ``breakpoint()`` actually pauses (dev tools turn this on)."""
+
         return self._breakpoints_enabled
 
     def enable_breakpoints(self):
         """Arms breakpoints so ``lane.breakpoint()`` calls start pausing."""
+
         self._breakpoints_enabled = True
 
     def disable_breakpoints(self):
         """Disarms breakpoints and releases anything currently paused."""
+
         self._breakpoints_enabled = False
+
         self.resume_all()
 
     def _register_gate(self, run_id: int, gate: _Gate):
         """Records a paused lane's gate (used internally by ``breakpoint``)."""
+
         self._gates[run_id] = gate
 
     def _clear_gate(self, run_id: int):
         """Forgets a gate once its lane has resumed."""
+
         self._gates.pop(run_id, None)
 
     def resume(self, run_id: int):
         """Releases the lane paused at the breakpoint with this ``run_id``."""
+
         gate = self._gates.get(run_id)
+
         if gate is not None:
             gate.release()
 
     def resume_all(self):
         """Releases every lane currently paused at a breakpoint."""
+
         for gate in list(self._gates.values()):
             gate.release()
 

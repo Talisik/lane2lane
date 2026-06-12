@@ -43,10 +43,13 @@ class _LaneCore:
     _registry: Optional[type] = None
 
     isolated: bool = False
+
     """
     If True, the lane will not return its values for the next lane.
     """
+
     process_mode: ProcessModeType = "one"
+
     """
     Controls how input values are processed.
 
@@ -58,6 +61,7 @@ class _LaneCore:
     """
 
     multiprocessing: bool = True
+
     """
     Determines whether to use multiprocessing for handling generator inputs.
 
@@ -66,7 +70,9 @@ class _LaneCore:
     ``await`` and ignores this flag; it is kept here so a shared ``Mock`` can
     drive both lane types.
     """
+
     use_filename: bool = False
+
     """
     Determines if the filename should be used as the lane name.
 
@@ -75,6 +81,7 @@ class _LaneCore:
     """
 
     lanes: LaneDictType = {}
+
     """
     A dictionary of lane classes, indexed by their priority number.
 
@@ -130,6 +137,7 @@ class _LaneCore:
         Done here (not at generator entry) so it reflects real execution order
         rather than the lazy, reversed generator-entry order.
         """
+
         if self._started_logged:
             return
 
@@ -164,12 +172,16 @@ class _LaneCore:
         Args:
             label: Optional note surfaced to the dev tool (e.g. a phase name).
         """
+
         if not events.breakpoints_enabled:
             return
 
         gate = _SyncGate()
+
         self._begin_breakpoint(gate, label)
+
         start = perf_counter()
+
         gate.wait()
         self._end_breakpoint(start)
 
@@ -180,20 +192,27 @@ class _LaneCore:
         Call as ``await self.abreakpoint()`` inside an async ``process``. Same
         dev-only semantics; releasable from another thread (the dev tool's).
         """
+
         if not events.breakpoints_enabled:
             return
 
         gate = _AsyncGate(asyncio.get_running_loop())
+
         self._begin_breakpoint(gate, label)
+
         start = perf_counter()
+
         await gate.wait()
+
         self._end_breakpoint(start)
 
     def _begin_breakpoint(self, gate, label: Optional[str]):
         run_id = id(self)
+
         events._register_gate(run_id, gate)
 
         suffix = f": {label}" if label else ""
+
         logger.pause(
             "N-{0} {1} paused at breakpoint{2}.",
             self._run_index,
@@ -213,6 +232,7 @@ class _LaneCore:
         run_id = id(self)
         # Don't count the manual pause as compute time.
         self._paused_seconds += perf_counter() - start
+
         events._clear_gate(run_id)
 
         logger.trace(
@@ -242,6 +262,7 @@ class _LaneCore:
             terminated: Property that checks if the lane has been terminated.
             terminate_on_error: Class method that determines termination behavior on errors.
         """
+
         self._terminated = kind
 
         events.emit(
@@ -270,18 +291,21 @@ class _LaneCore:
     @final
     def start_time(self):
         """`perf_counter()` timestamp when this lane's processing last started."""
+
         return self._start_time
 
     @property
     @final
     def duration(self):
         """Wall-clock seconds since processing started (live until done)."""
+
         return perf_counter() - self._start_time
 
     @classmethod
     @final
     def terminate_on_error(cls):
         """Whether an unhandled error in `process()` terminates the lane (True)."""
+
         return True
 
     @classmethod
@@ -300,6 +324,7 @@ class _LaneCore:
     @final
     def global_errors_str():
         """Yields the string form of each globally captured exception."""
+
         return (str(error) for error in _LaneCore._global_errors)
 
     @staticmethod
@@ -312,12 +337,14 @@ class _LaneCore:
     @final
     def global_errors_count():
         """Number of exceptions captured across all lanes since the last run."""
+
         return len(_LaneCore._global_errors)
 
     @property
     @final
     def terminated(self):
         """The chain's `TerminateKind` (reads the primary lane's flag)."""
+
         return (self.primary_lane or self)._terminated
 
     @classmethod
@@ -327,6 +354,7 @@ class _LaneCore:
         Collects lanes from this class's ``lanes`` dictionary and merges them
         with lanes from all parent lane classes.
         """
+
         lanes = {**cls.lanes} if self is None else {**self.lanes}
 
         for base in cls.__mro__[1:]:
@@ -338,6 +366,7 @@ class _LaneCore:
     @classmethod
     def _resolve_lane_reference(cls, lane):
         """Resolves a lane reference (dict/Mock/str/class/None) to a runnable."""
+
         if isinstance(lane, dict):
             return Mock(lanes=lane)
 
@@ -355,6 +384,7 @@ class _LaneCore:
     @classmethod
     def _get_lane_ref(cls, value):
         """Resolves a single lane reference for ``goto`` (str/class/None)."""
+
         if value is None:
             return None
 
@@ -370,6 +400,7 @@ class _LaneCore:
         Only lanes with negative priority are 'before' lanes, sorted ascending
         (more negative priorities execute first).
         """
+
         for _, lane in sorted(
             filter(
                 lambda v: v[0] < 0,
@@ -389,6 +420,7 @@ class _LaneCore:
         Only lanes with non-negative priority are 'after' lanes, sorted
         descending (higher priorities execute first).
         """
+
         for _, lane in sorted(
             filter(
                 lambda v: v[0] >= 0,
@@ -409,12 +441,14 @@ class _LaneCore:
         Returns ``None`` for primary lanes; otherwise the primary lane that
         initiated this lane's execution chain.
         """
+
         return self._primary_lane
 
     @property
     @final
     def errors_count(self):
         """Number of exceptions captured in this lane's chain."""
+
         return len((self.primary_lane or self)._errors)
 
     @property
@@ -427,6 +461,7 @@ class _LaneCore:
     @final
     def errors_str(self):
         """Yields the string form of each exception in this lane's chain."""
+
         return (str(error) for error in (self.primary_lane or self)._errors)
 
     @property
@@ -446,6 +481,7 @@ class _LaneCore:
     @final
     def get_run_count(cls):
         """Returns the number of times this lane class has been executed."""
+
         return cls._run_count
 
     @classmethod
@@ -455,6 +491,7 @@ class _LaneCore:
         Primary lanes can be directly executed through ``start``. Non-primary
         lanes only execute as part of a lane chain. False by default.
         """
+
         return False
 
     @classmethod
@@ -464,11 +501,13 @@ class _LaneCore:
         Passive lanes still execute but don't appear in ``print_available_lanes``.
         False by default.
         """
+
         return False
 
     @classmethod
     def max_run_count(cls) -> int:
         """Maximum number of times this lane can run. 0 (default) means unlimited."""
+
         return 0
 
     @classmethod
@@ -488,12 +527,14 @@ class _LaneCore:
     @final
     def first_name(cls) -> str:  # type: ignore
         """Returns the first name from the lane's name generator."""
+
         for name in cls.name():
             return name
 
     @classmethod
     def priority_number(cls) -> float:
         """Returns the priority number for this lane (higher runs first). 0 by default."""
+
         return 0
 
     @classmethod
@@ -503,6 +544,7 @@ class _LaneCore:
         Primary lanes run when ``name`` matches one of their names; non-primary
         lanes always return True.
         """
+
         if cls.primary():
             return name in cls.name()
 
@@ -514,6 +556,7 @@ class _LaneCore:
         The default implementation does nothing. Note this hook is synchronous
         for both lane types.
         """
+
         pass
 
     @staticmethod
@@ -530,6 +573,7 @@ class _LaneCore:
     @final
     def get_lane(cls, name: str):
         """Retrieves a lane class by its name from this lane family's registry."""
+
         for lane in cls.all_lanes():
             if lane.__name__ == name:
                 return lane
@@ -541,6 +585,7 @@ class _LaneCore:
     @final
     def all_lanes(cls):
         """Returns all descendant lane classes in this lane family (excluding ABC)."""
+
         return get_all_descendant_classes(
             cls._registry or cls,
             exclude=[ABC],
@@ -550,6 +595,7 @@ class _LaneCore:
     @final
     def available_lanes(cls):
         """Returns available lane classes (under max run count), sorted by priority."""
+
         return sorted(
             filter(cls._lane_predicate, cls.all_lanes()),
             key=lambda descendant: descendant.priority_number(),
@@ -559,6 +605,7 @@ class _LaneCore:
     @final
     def get_primary_lane(cls, name: str):
         """Returns the first primary lane that matches the specified name."""
+
         for lane in cls.get_primary_lanes(name):
             return lane
 
@@ -566,6 +613,7 @@ class _LaneCore:
     @final
     def get_primary_lanes(cls, name: str):
         """Yields instantiated primary lanes that match the condition for ``name``."""
+
         descendants = cls.available_lanes()
 
         for descendant in descendants:
@@ -582,6 +630,7 @@ class _LaneCore:
     @classmethod
     def from_mock(cls, mock: Mock):
         """Builds a lane instance from a `Mock` (inline, anonymous sub-pipeline)."""
+
         lane = cls()
         lane.lanes = mock.lanes
         lane.isolated = mock.isolated
@@ -676,6 +725,7 @@ class _LaneCore:
         indent_text: str,
     ):
         lanes0: List[Type["_LaneCore"]] = [lane[0] for lane in lanes]
+
         lanes0.sort(
             key=lambda lane: lane.priority_number(),
         )
@@ -743,6 +793,7 @@ class _LaneCore:
                 lanes=category,
                 indent_text=indent_text,
             )
+
             return
 
         for sub_category in category.items():
@@ -760,6 +811,7 @@ class _LaneCore:
         Primary lanes matching ``name`` are highlighted (green ✓); non-matching
         primary lanes are dimmed (✕); passive lanes are blue.
         """
+
         categorized = [
             (0, pair)
             for pair in categorizer(
