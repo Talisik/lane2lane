@@ -61,9 +61,9 @@ class Lane(_LaneCore):
 
         events.emit(
             "lane_active",
-            run_id=id(self),
+            run_id=self._uid,
             name=self.first_name(),
-            parent_id=id(self._tree_parent) if self._tree_parent else None,
+            parent_id=self._tree_parent._uid if self._tree_parent else None,
         )
 
         start = perf_counter()
@@ -84,7 +84,7 @@ class Lane(_LaneCore):
             # the output, which is often a generator that must not be iterated.
             events.emit(
                 "lane_idle",
-                run_id=id(self),
+                run_id=self._uid,
                 name=self.first_name(),
                 work=self._work_seconds,
                 value=value,
@@ -170,6 +170,7 @@ class Lane(_LaneCore):
     ):
         self._start_time = perf_counter()
         self._started_logged = False  # "started" logs at the first process() call
+        errored = False
 
         try:
             if isgenerator(value):
@@ -198,6 +199,8 @@ class Lane(_LaneCore):
                     yield result
 
         except Exception as e:
+            errored = True
+
             self._add_error(
                 e,
                 traceback.format_exc(),
@@ -217,11 +220,12 @@ class Lane(_LaneCore):
 
         events.emit(
             "lane_done",
-            run_id=id(self),
+            run_id=self._uid,
             name=self.first_name(),
             duration=self.duration,
             work=self._work_seconds,
             terminated=self.terminated != TerminateKind.NO,
+            errors=errored,
         )
 
     @final
@@ -335,11 +339,17 @@ class Lane(_LaneCore):
         print_lanes=True,
         print_indent=2,
         processes: Optional[int] = None,
+        require_active: bool = True,
     ):
         """Starts all primary lanes matching ``name`` and yields their results.
 
         Clears global errors, finds matching primary lanes, optionally prints
         the available lanes and load order, then runs each and yields results.
+
+        ``require_active`` raises 'No lanes found' when only passive lanes match
+        (so a typo'd queue still errors). Set it False when a caller has already
+        verified the queue is valid elsewhere (e.g. an active lane in the async
+        registry) but still wants this registry's passive lanes to run.
         """
 
         cls._reset_global_errors()
@@ -350,7 +360,7 @@ class Lane(_LaneCore):
             lanes,
         )
 
-        if not any(active_lanes):
+        if require_active and not any(active_lanes):
             raise ValueError(f"No lanes found for '{name}'!")
 
         if print_lanes:

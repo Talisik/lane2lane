@@ -88,9 +88,9 @@ class AsyncLane(_LaneCore):
 
         events.emit(
             "lane_active",
-            run_id=id(self),
+            run_id=self._uid,
             name=self.first_name(),
-            parent_id=id(self._tree_parent) if self._tree_parent else None,
+            parent_id=self._tree_parent._uid if self._tree_parent else None,
         )
 
         start = perf_counter()
@@ -117,7 +117,7 @@ class AsyncLane(_LaneCore):
             # iterated.
             events.emit(
                 "lane_idle",
-                run_id=id(self),
+                run_id=self._uid,
                 name=self.first_name(),
                 work=self._work_seconds,
                 value=value,
@@ -206,6 +206,7 @@ class AsyncLane(_LaneCore):
     ):
         self._start_time = perf_counter()
         self._started_logged = False  # "started" logs at the first process() call
+        errored = False
 
         try:
             if isgenerator(value) or isasyncgen(value):
@@ -219,6 +220,8 @@ class AsyncLane(_LaneCore):
                     yield item
 
         except Exception as e:
+            errored = True
+
             self._add_error(
                 e,
                 traceback.format_exc(),
@@ -238,11 +241,12 @@ class AsyncLane(_LaneCore):
 
         events.emit(
             "lane_done",
-            run_id=id(self),
+            run_id=self._uid,
             name=self.first_name(),
             duration=self.duration,
             work=self._work_seconds,
             terminated=self.terminated != TerminateKind.NO,
+            errors=errored,
         )
 
     @final
@@ -357,11 +361,13 @@ class AsyncLane(_LaneCore):
         print_lanes=True,
         print_indent=2,
         processes: Optional[int] = None,
+        require_active: bool = True,
     ):
         """Starts all primary async lanes matching ``name`` and yields results.
 
         Async counterpart of :meth:`l2l.Lane.start`. This is an async generator;
         iterate it with ``async for`` (or drain it inside ``asyncio.run``).
+        ``require_active`` behaves as in :meth:`l2l.Lane.start`.
         """
 
         cls._reset_global_errors()
@@ -372,7 +378,7 @@ class AsyncLane(_LaneCore):
             lanes,
         )
 
-        if not any(active_lanes):
+        if require_active and not any(active_lanes):
             raise ValueError(f"No lanes found for '{name}'!")
 
         if print_lanes:

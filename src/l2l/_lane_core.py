@@ -94,12 +94,20 @@ class _LaneCore:
     _run_count: int = 0
     _global_errors: List[Exception] = []
     _global_errors_stacktrace: List[str] = []
+    #: Monotonic counter handing out a unique id per lane instance. id(self) is
+    #: NOT safe for event run_ids: a finished lane is freed and its address gets
+    #: reused by the next instance, so observers would conflate the two (e.g. a
+    #: pipeline's sub-lanes nesting under an already-finished passive lane).
+    _uid_counter: int = 0
 
     def __init__(
         self,
         primary_lane: Optional["_LaneCore"] = None,
     ):
         self._primary_lane = primary_lane
+        _LaneCore._uid_counter += 1
+        #: Globally-unique id for this instance (see ``_uid_counter``).
+        self._uid = _LaneCore._uid_counter
         self._errors: List[Exception] = []
         self._errors_stacktrace: List[str] = []
         self._terminated: TerminateKind = TerminateKind.NO
@@ -151,9 +159,9 @@ class _LaneCore:
 
         events.emit(
             "lane_started",
-            run_id=id(self),
+            run_id=self._uid,
             name=self.first_name(),
-            parent_id=id(self._tree_parent) if self._tree_parent else None,
+            parent_id=self._tree_parent._uid if self._tree_parent else None,
         )
 
     @final
@@ -207,7 +215,7 @@ class _LaneCore:
         self._end_breakpoint(start)
 
     def _begin_breakpoint(self, gate, label: Optional[str]):
-        run_id = id(self)
+        run_id = self._uid
 
         events._register_gate(run_id, gate)
 
@@ -224,12 +232,12 @@ class _LaneCore:
             "lane_breakpoint",
             run_id=run_id,
             name=self.first_name(),
-            parent_id=id(self._tree_parent) if self._tree_parent else None,
+            parent_id=self._tree_parent._uid if self._tree_parent else None,
             label=label,
         )
 
     def _end_breakpoint(self, start: float):
-        run_id = id(self)
+        run_id = self._uid
         # Don't count the manual pause as compute time.
         self._paused_seconds += perf_counter() - start
 
@@ -267,7 +275,7 @@ class _LaneCore:
 
         events.emit(
             "lane_terminated",
-            run_id=id(self),
+            run_id=self._uid,
             name=self.first_name(),
             terminate_kind=kind.value,
         )
