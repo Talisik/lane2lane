@@ -221,21 +221,26 @@ def on_event(kind, payload):
 
 Event kinds and payloads:
 
-| kind              | payload                                              |
-| ----------------- | ---------------------------------------------------- |
-| `lane_started`    | `run_id`, `name`, `parent_id` (first `process` call) |
-| `lane_active`     | `run_id`, `name`, `parent_id` (a `process` call)     |
-| `lane_idle`       | `run_id`, `name`, `work`                             |
-| `lane_done`       | `run_id`, `name`, `duration`, `work`, `terminated`   |
-| `lane_terminated` | `run_id`, `name`, `terminate_kind`                   |
-| `lane_breakpoint` | `run_id`, `name`, `parent_id`, `label`               |
-| `lane_resumed`    | `run_id`, `name`                                     |
+| kind              | payload                                                       |
+| ----------------- | ------------------------------------------------------------- |
+| `lane_started`    | `run_id`, `name`, `parent_id` (first `process` call)          |
+| `lane_active`     | `run_id`, `name`, `parent_id` (a `process` call)              |
+| `lane_idle`       | `run_id`, `name`, `work`, `value`                             |
+| `lane_done`       | `run_id`, `name`, `duration`, `work`, `terminated`, `errors`  |
+| `lane_terminated` | `run_id`, `name`, `terminate_kind`                            |
+| `lane_breakpoint` | `run_id`, `name`, `parent_id`, `label`                        |
+| `lane_resumed`    | `run_id`, `name`                                              |
 
--   `run_id` identifies a lane instance; `parent_id` is its immediate parent's
-    `run_id` (or `None`), so you can nest sub-lanes under their parent.
+-   `run_id` is a stable, unique id per lane instance (a monotonic counter — not
+    `id()`, which a finished instance can have reused); `parent_id` is its
+    immediate parent's `run_id` (or `None`), so you can nest sub-lanes under
+    their parent.
 -   `duration` is wall-clock since start (bunches up at pipeline drain for lazy
     chains); `work` is the truthful cumulative time spent inside the lane's own
     `process()` calls.
+-   `lane_idle.value` is the **input** to that `process()` call (a concrete
+    item/batch — never the output, which may be a generator that must not be
+    iterated). `lane_done.errors` is `True` if the lane raised during the run.
 
 ## Breakpoints
 
